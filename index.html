@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPON TV • Reporte de Canales</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+   
+        * {
+            transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 150ms;
+        }
+   
+        .channel-card {
+            transition: all 0.2s ease;
+        }
+   
+        .channel-card:hover {
+            background-color: #1a1a1a;
+        }
+   
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+   
+        .switch input { opacity: 0; width: 0; height: 0; }
+   
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #333333;
+            border-radius: 9999px;
+            border: 2px solid #555555;
+        }
+   
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+        }
+   
+        input:checked + .slider {
+            background-color: #22c55e;
+            border-color: #22c55e;
+        }
+   
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        .status-ok {
+            background-color: #22c55e;
+            color: #111111;
+            font-weight: 700;
+        }
+   
+        .status-problem {
+            background-color: #ef4444;
+            color: #ffffff;
+            font-weight: 700;
+        }
+        .status-text {
+            font-family: 'Inter', system_ui, sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .text-yes {
+            color: #22c55e;
+            font-weight: 700;
+        }
+        .text-no {
+            color: #ef4444;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        /* === MODO CLARO === */
+        body.light {
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        body.light .bg-black { background-color: #ffffff !important; }
+        body.light .bg-zinc-900 { background-color: #f1f5f9 !important; }
+        body.light .bg-zinc-950 { background-color: #f8fafc !important; }
+        body.light .border-zinc-800 { border-color: #e2e8f0 !important; }
+        body.light .border-zinc-700 { border-color: #cbd5e1 !important; }
+        body.light .text-slate-200 { color: #0f172a !important; }
+        body.light .text-white { color: #0f172a !important; }
+        body.light .text-slate-400 { color: #64748b !important; }
+        body.light .channel-card:hover { background-color: #f1f5f9 !important; }
+        body.light .text-orange-400 { color: #f97316 !important; }
+        body.light .bg-orange-500 { background-color: #f97316 !important; }
+        body.light .hover\:bg-orange-400:hover { background-color: #fb923c !important; }
+        body.light .bg-red-500\/10 { background-color: #fee2e2 !important; }
+        body.light .text-red-400 { color: #ef4444 !important; }
+
+        /* Switch en modo claro */
+        body.light .slider {
+            background-color: #e2e8f0 !important;
+            border-color: #94a3b8 !important;
+        }
+        body.light input:checked + .slider {
+            background-color: #22c55e !important;
+            border-color: #22c55e !important;
+        }
+        body.light .slider:before {
+            background-color: #0f172a !important;
+        }
+
+        /* Mejora de espaciado en tarjetas */
+        .channel-card .flex.items-center.gap-8 {
+            gap: 2.25rem !important;
+        }
+    </style>
+</head>
+<body class="bg-black text-slate-200 min-h-screen font-sans">
+    <div class="max-w-5xl mx-auto px-6 py-8">
+   
+        <!-- HEADER -->
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 bg-orange-1000 rounded-2xl flex items-center justify-center text-4xl">📺</div>
+                <div>
+                    <h1 class="text-3xl font-semibold tracking-tight text-orange-400">GPON TV</h1>
+                    <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
+                </div>
+            </div>
+       
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-8">
+                    <div class="text-right">
+                        <div class="text-xs text-slate-400">TOTAL</div>
+                        <div id="total-channels" class="text-4xl font-semibold">0</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs text-slate-400">INCIDENCIAS</div>
+                        <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
+                    </div>
+                </div>
+
+                <button onclick="toggleForm()" id="toggle-form-btn"
+                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
+                    <span id="form-icon">▲</span>
+                    <span id="form-text">Formulario</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- BOTÓN MODO CLARO/OSCURO EN LA ESQUINA -->
+        <button onclick="toggleTheme()" id="theme-toggle"
+                class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
+            🌙
+        </button>
+
+        <!-- FORMULARIO -->
+        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">
+                ➕ Agregar nuevo canal
+            </h2>
+            <div class="flex gap-4">
+                <div class="w-28">
+                    <label class="block text-xs font-medium text-slate-400 mb-1">NÚMERO</label>
+                    <input id="channel-number" type="text" placeholder="7"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-2xl font-mono font-bold outline-none text-center">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-400 mb-1">NOMBRE DEL CANAL</label>
+                    <input id="channel-name" type="text" placeholder="América TV"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-lg outline-none">
+                </div>
+                <button onclick="addChannel()"
+                        class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl text-base shadow-lg">
+                    AGREGAR
+                </button>
+            </div>
+        </div>
+
+        <!-- LISTADO -->
+        <div class="flex justify-between items-center mb-5">
+            <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
+       
+            <div class="flex gap-3">
+                <button onclick="clearAllChannels()"
+                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-red-500/10 hover:text-red-400 border border-zinc-800 rounded-3xl text-sm font-medium">
+                    🗑️ BORRAR
+                </button>
+            
+                <button onclick="toggleFilter()" id="filter-button"
+                        class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium">
+                    <span id="filter-icon">🔴</span>
+                    <span id="filter-text">INCIDENCIAS</span>
+                </button>
+            </div>
+        </div>
+        <div id="channels-list" class="space-y-2"></div>
+
+        <!-- Mensaje vacío -->
+        <div id="empty-state" class="hidden text-center py-16">
+            <div class="text-6xl mb-4">📺</div>
+            <h3 class="text-2xl font-medium text-white">No hay canales aún</h3>
+            <p class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
+        </div>
+
+        <!-- Barra inferior -->
+        <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
+            <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
+                <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
+                <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
+            </div>
+       
+            <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">Exportar CSV</button>
+            <button onclick="importDemoData()"
+                    class="bg-orange-500 hover:bg-orange-400 text-black px-5 py-1.5 rounded-2xl text-sm font-semibold">Cargar Demo</button>
+        </div>
+    </div>
+
+    <script>
+        let channels = []
+        let filterOnlyIncidents = false
+        let formVisible = true
+        let isDarkMode = true
+
+        function saveToLocalStorage() {
+            localStorage.setItem('tvMonitorChannels', JSON.stringify(channels))
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light')
+        }
+
+        function loadFromLocalStorage() {
+            const saved = localStorage.getItem('tvMonitorChannels')
+            if (saved) {
+                channels = JSON.parse(saved)
+            } else {
+                channels = [
+                    { id: 1, number: "4", name: "ATV", image: true, sound: true },
+                    { id: 2, number: "5", name: "Panamericana TV", image: true, sound: false },
+                    { id: 3, number: "7", name: "América TV", image: false, sound: true },
+                    { id: 4, number: "9", name: "TV Perú", image: true, sound: true },
+                    { id: 5, number: "11", name: "Latina TV", image: false, sound: false },
+                    { id: 6, number: "13", name: "Nativa TV", image: true, sound: true }
+                ]
+                saveToLocalStorage()
+            }
+
+            const savedTheme = localStorage.getItem('theme')
+            if (savedTheme === 'light') {
+                isDarkMode = false
+                document.body.classList.add('light')
+                document.getElementById('theme-toggle').innerHTML = '☀️'
+            } else {
+                isDarkMode = true
+                document.body.classList.remove('light')
+                document.getElementById('theme-toggle').innerHTML = '🌙'
+            }
+        }
+
+        function hasProblem(channel) {
+            return !channel.image || !channel.sound
+        }
+
+        function sortChannels() {
+            channels.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+        }
+
+        function renderChannels() {
+            sortChannels();
+            const container = document.getElementById('channels-list')
+            const empty = document.getElementById('empty-state')
+            const totalEl = document.getElementById('total-channels')
+            const incidentsEl = document.getElementById('incidents-count')
+            const viewTitle = document.getElementById('view-title')
+            const footerDot = document.getElementById('footer-dot')
+            const footerText = document.getElementById('footer-text')
+
+            let displayed = channels
+            if (filterOnlyIncidents) {
+                displayed = channels.filter(ch => hasProblem(ch))
+            }
+
+            totalEl.textContent = channels.length
+            const incidentCount = channels.filter(ch => hasProblem(ch)).length
+            incidentsEl.textContent = incidentCount
+            footerText.textContent = `${incidentCount} incidencias`
+            footerDot.className = incidentCount > 0
+                ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"
+                : "w-3.5 h-3.5 bg-orange-500 rounded-full"
+
+            viewTitle.textContent = filterOnlyIncidents
+                ? `Canales con incidencias (${displayed.length})`
+                : `Todos los canales (${channels.length})`
+
+            container.innerHTML = ''
+            if (displayed.length === 0) {
+                empty.classList.remove('hidden')
+                return
+            }
+            empty.classList.add('hidden')
+
+            displayed.forEach(channel => {
+                const problem = hasProblem(channel)
+            
+                const card = document.createElement('div')
+                card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`
+            
+                card.innerHTML = `
+                    <div class="flex items-center gap-6">
+                        <div class="w-14 text-center">
+                            <div class="text-3xl font-mono font-bold text-orange-400">#${channel.number}</div>
+                        </div>
+                        <div>
+                            <div class="text-xl font-semibold">${channel.name}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-8">
+                        <div class="flex items-center gap-3">
+                            <span class="text-white font-medium w-14 text-sm">IMAGEN</span>
+                            <span class="status-text ${channel.image ? 'text-yes' : 'text-no'}">
+                                ${channel.image ? 'SÍ' : 'NO'}
+                            </span>
+                            <label class="switch">
+                                <input type="checkbox" ${channel.image ? 'checked' : ''} 
+                                       onchange="updateImage(${channel.id}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-white font-medium w-14 text-sm">SONIDO</span>
+                            <span class="status-text ${channel.sound ? 'text-yes' : 'text-no'}">
+                                ${channel.sound ? 'SÍ' : 'NO'}
+                            </span>
+                            <label class="switch">
+                                <input type="checkbox" ${channel.sound ? 'checked' : ''} 
+                                       onchange="updateSound(${channel.id}, this.checked)">
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
+                            ${problem ? 'INCIDENCIA' : 'ESTABLE'}
+                        </div>
+                        <button onclick="deleteChannel(${channel.id})"
+                                class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
+                    </div>
+                `
+                container.appendChild(card)
+            })
+        }
+
+        function toggleForm() {
+            formVisible = !formVisible
+            const formContainer = document.getElementById('form-container')
+            const formText = document.getElementById('form-text')
+            const formIcon = document.getElementById('form-icon')
+            if (formVisible) {
+                formContainer.style.display = 'block'
+                formText.textContent = 'Formulario'
+                formIcon.textContent = '▲'
+            } else {
+                formContainer.style.display = 'none'
+                formText.textContent = 'Formulario'
+                formIcon.textContent = '▼'
+            }
+        }
+
+        function addChannel() {
+            const number = document.getElementById('channel-number').value.trim()
+            const name = document.getElementById('channel-name').value.trim()
+            if (!number || !name) {
+                alert("Por favor ingresa el número y nombre del canal")
+                return
+            }
+            if (channels.some(ch => ch.number === number)) {
+                if (!confirm(`Ya existe un canal con el número ${number}. ¿Agregar de todas formas?`)) return;
+            }
+            channels.push({
+                id: Date.now(),
+                number: number,
+                name: name,
+                image: true,
+                sound: true
+            });
+            saveToLocalStorage()
+            document.getElementById('channel-number').value = ''
+            document.getElementById('channel-name').value = ''
+            renderChannels()
+        }
+
+        function deleteChannel(id) {
+            if (confirm("¿Eliminar este canal?")) {
+                channels = channels.filter(ch => ch.id !== id)
+                saveToLocalStorage()
+                renderChannels()
+            }
+        }
+
+        function clearAllChannels() {
+            if (confirm("¿Estás seguro de borrar TODA la lista de canales?\n\nEsta acción no se puede deshacer.")) {
+                channels = []
+                saveToLocalStorage()
+                renderChannels()
+            }
+        }
+
+        function updateImage(id, value) {
+            const ch = channels.find(c => c.id === id)
+            if (ch) ch.image = value
+            saveToLocalStorage()
+            renderChannels()
+        }
+
+        function updateSound(id, value) {
+            const ch = channels.find(c => c.id === id)
+            if (ch) ch.sound = value
+            saveToLocalStorage()
+            renderChannels()
+        }
+
+        function toggleFilter() {
+            filterOnlyIncidents = !filterOnlyIncidents
+            const btn = document.getElementById('filter-button')
+            const icon = document.getElementById('filter-icon')
+            const text = document.getElementById('filter-text')
+            if (filterOnlyIncidents) {
+                icon.textContent = '📋'
+                text.textContent = 'TODO'
+                btn.classList.add('bg-orange-500', 'text-white')
+            } else {
+                icon.textContent = '🔴'
+                text.textContent = 'INCIDENCIAS'
+                btn.classList.remove('bg-orange-500', 'text-black')
+            }
+            renderChannels()
+        }
+
+        function exportData() {
+            if (channels.length === 0) return alert("No hay datos para exportar")
+            let csv = "Número,Nombre,Imagen,Sonido,Estado\n"
+            channels.forEach(ch => {
+                const estado = hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"
+                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${estado}\n`
+            })
+            const blob = new Blob([csv], { type: 'text/csv' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `gpon_tv_${new Date().toISOString().slice(0,10)}.csv`
+            a.click()
+        }
+
+        function importDemoData() {
+            if (channels.length > 0 && !confirm("¿Reemplazar la lista actual con datos de demostración?")) return
+            channels = [
+                { id: 1, number: "4", name: "ATV", image: true, sound: true },
+                { id: 2, number: "5", name: "Panamericana TV", image: true, sound: false },
+                { id: 3, number: "7", name: "América TV", image: false, sound: true },
+                { id: 4, number: "9", name: "TV Perú", image: true, sound: true },
+                { id: 5, number: "11", name: "Latina TV", image: false, sound: false },
+                { id: 6, number: "13", name: "Nativa TV", image: true, sound: true },
+                { id: 7, number: "15", name: "Willax", image: false, sound: true }
+            ]
+            saveToLocalStorage()
+            filterOnlyIncidents = false
+            renderChannels()
+        }
+
+        function toggleTheme() {
+            isDarkMode = !isDarkMode
+            const body = document.body
+            const toggleBtn = document.getElementById('theme-toggle')
+
+            if (isDarkMode) {
+                body.classList.remove('light')
+                toggleBtn.innerHTML = '🌙'
+            } else {
+                body.classList.add('light')
+                toggleBtn.innerHTML = '☀️'
+            }
+            saveToLocalStorage()
+        }
+
+        window.onload = () => {
+            loadFromLocalStorage()
+            renderChannels()
+            document.getElementById('channel-name').addEventListener('keypress', e => {
+                if (e.key === 'Enter') addChannel()
+            })
+        }
+    </script>
+</body>
+</html>
