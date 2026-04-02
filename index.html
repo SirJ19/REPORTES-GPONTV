@@ -341,7 +341,7 @@
                             </label>
                         </div>
                         <div class="flex items-center gap-3">
-                            <span class="text-white font-medium w-14 text-sm">SONIDO</span>
+                            <span class="text-white font-medium w-14 text-sm">AUDIO</span>
                             <span class="status-text ${channel.sound ? 'text-yes' : 'text-no'}">
                                 ${channel.sound ? 'SÍ' : 'NO'}
                             </span>
@@ -452,7 +452,7 @@
 
         function exportData() {
             if (channels.length === 0) return alert("No hay datos para exportar")
-            let csv = "Número,Nombre,Imagen,Sonido,Estado\n"
+            let csv = "Número,Nombre,Imagen,Audio,Estado\n"
             channels.forEach(ch => {
                 const estado = hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"
                 csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${estado}\n`
