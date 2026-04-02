@@ -107,7 +107,6 @@
         body.light .bg-red-500\/10 { background-color: #fee2e2 !important; }
         body.light .text-red-400 { color: #ef4444 !important; }
 
-        /* Switch en modo claro */
         body.light .slider {
             background-color: #e2e8f0 !important;
             border-color: #94a3b8 !important;
@@ -120,7 +119,6 @@
             background-color: #0f172a !important;
         }
 
-        /* Mejora de espaciado en tarjetas */
         .channel-card .flex.items-center.gap-8 {
             gap: 2.25rem !important;
         }
@@ -236,6 +234,7 @@
         function saveToLocalStorage() {
             localStorage.setItem('tvMonitorChannels', JSON.stringify(channels))
             localStorage.setItem('theme', isDarkMode ? 'dark' : 'light')
+            localStorage.setItem('formVisible', formVisible)   // ← NUEVO: Guardar estado del formulario
         }
 
         function loadFromLocalStorage() {
@@ -254,6 +253,7 @@
                 saveToLocalStorage()
             }
 
+            // Cargar tema
             const savedTheme = localStorage.getItem('theme')
             if (savedTheme === 'light') {
                 isDarkMode = false
@@ -263,6 +263,12 @@
                 isDarkMode = true
                 document.body.classList.remove('light')
                 document.getElementById('theme-toggle').innerHTML = '🌙'
+            }
+
+            // Cargar estado del formulario (NUEVO)
+            const savedForm = localStorage.getItem('formVisible')
+            if (savedForm !== null) {
+                formVisible = savedForm === 'true'
             }
         }
 
@@ -310,7 +316,6 @@
 
             displayed.forEach(channel => {
                 const problem = hasProblem(channel)
-            
                 const card = document.createElement('div')
                 card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`
             
@@ -362,6 +367,7 @@
             const formContainer = document.getElementById('form-container')
             const formText = document.getElementById('form-text')
             const formIcon = document.getElementById('form-icon')
+
             if (formVisible) {
                 formContainer.style.display = 'block'
                 formText.textContent = 'Formulario'
@@ -371,6 +377,7 @@
                 formText.textContent = 'Formulario'
                 formIcon.textContent = '▼'
             }
+            saveToLocalStorage()   // ← Guardar el nuevo estado
         }
 
         function addChannel() {
@@ -481,17 +488,34 @@
 
             if (isDarkMode) {
                 body.classList.remove('light')
-                toggleBtn.innerHTML = '🌙'
+                toggleBtn.innerHTML = '☀️'
             } else {
                 body.classList.add('light')
-                toggleBtn.innerHTML = '☀️'
+                toggleBtn.innerHTML = '🌙'
             }
             saveToLocalStorage()
         }
 
         window.onload = () => {
             loadFromLocalStorage()
+            
+            // Aplicar el estado guardado del formulario
+            const formContainer = document.getElementById('form-container')
+            const formText = document.getElementById('form-text')
+            const formIcon = document.getElementById('form-icon')
+            
+            if (formVisible) {
+                formContainer.style.display = 'block'
+                formText.textContent = 'Formulario'
+                formIcon.textContent = '▲'
+            } else {
+                formContainer.style.display = 'none'
+                formText.textContent = 'Formulario'
+                formIcon.textContent = '▼'
+            }
+
             renderChannels()
+            
             document.getElementById('channel-name').addEventListener('keypress', e => {
                 if (e.key === 'Enter') addChannel()
             })
