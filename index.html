@@ -184,7 +184,7 @@
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium">
                     <span id="filter-icon">🔴</span>
-                    <span id="filter-text">INCIDENCIAS</span>
+                    <span id="filter-text">SOLO INCIDENCIAS</span>
                 </button>
             </div>
         </div>
@@ -411,11 +411,11 @@
 
             if (filterOnlyIncidents) {
                 icon.textContent = '📋'
-                text.textContent = 'TODO'
+                text.textContent = 'TODOS'
                 btn.classList.add('bg-orange-500', 'text-white')
             } else {
                 icon.textContent = '🔴'
-                text.textContent = 'INCIDENCIAS'
+                text.textContent = 'SOLO INCIDENCIAS'
                 btn.classList.remove('bg-orange-500', 'text-white')
             }
             renderChannels()
