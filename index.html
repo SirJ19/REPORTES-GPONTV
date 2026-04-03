@@ -95,11 +95,13 @@
                 </button>
             </div>
         </div>
+
         <!-- BOTÓN TEMA -->
         <button onclick="toggleTheme()" id="theme-toggle"
                 class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
             🌙
         </button>
+
         <!-- FORMULARIO + BUSCADOR -->
         <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
             <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
@@ -134,12 +136,14 @@
                 </div>
             </div>
         </div>
+
         <!-- LISTADO -->
         <div class="flex justify-between items-center mb-5">
             <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
             <div class="flex gap-3">
+                <!-- Botón ACTUALIZAR más pequeño -->
                 <button onclick="refreshChannels()" id="refresh-btn"
-                        class="flex items-center justify-center w-11 h-11 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-2xl font-medium">
+                        class="flex items-center justify-center w-9 h-9 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-xl font-medium">
                     🔄
                 </button>
                
@@ -150,6 +154,7 @@
                 </button>
             </div>
         </div>
+
         <div id="channels-list" class="space-y-2"></div>
         <div id="empty-state" class="hidden text-center py-16">
             <div class="text-6xl mb-4">📺</div>
@@ -157,6 +162,7 @@
             <p id="empty-subtitle" class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
         </div>
     </div>
+
     <!-- BARRA INFERIOR -->
     <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
         <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
@@ -243,7 +249,7 @@
             }
         }
 
-        // ==================== REFRESH FUNCTION (MODIFICADA) ====================
+        // ==================== REFRESH FUNCTION ====================
         async function refreshChannels() {
             const btn = document.getElementById('refresh-btn');
             const originalHTML = btn.innerHTML;
