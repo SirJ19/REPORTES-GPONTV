@@ -141,14 +141,10 @@
         <div class="flex justify-between items-center mb-5">
             <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
             <div class="flex gap-3">
-                <!-- Nuevo botón ACTUALIZAR -->
+                <!-- Botón ACTUALIZAR -->
                 <button onclick="refreshChannels()" 
                         class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium">
                     🔄 ACTUALIZAR
-                </button>
-                
-                <button onclick="clearAllChannels()" class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-red-500/10 hover:text-red-400 border border-zinc-800 rounded-3xl text-sm font-medium">
-                    🗑️ BORRAR TODO
                 </button>
                 
                 <button onclick="toggleFilter()" id="filter-button"
@@ -253,21 +249,12 @@
             }
         }
 
-        // ==================== HELPERS ====================
-        function hasProblem(channel) {
-            return !channel.image || !channel.sound;
-        }
-
-        function sortChannels() {
-            channels.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-        }
-
         // ==================== REFRESH FUNCTION ====================
         async function refreshChannels() {
             const btn = event.currentTarget;
             const originalText = btn.innerHTML;
             
-            btn.innerHTML = `🔄 ACTUALIZANDO...`;
+            btn.innerHTML = `🔄 Actualizando...`;
             btn.disabled = true;
             
             await loadChannels();
@@ -277,6 +264,15 @@
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }, 800);
+        }
+
+        // ==================== HELPERS ====================
+        function hasProblem(channel) {
+            return !channel.image || !channel.sound;
+        }
+
+        function sortChannels() {
+            channels.sort((a, b) => parseInt(a.number) - parseInt(b.number));
         }
 
         // ==================== RENDER ====================
@@ -361,179 +357,4 @@
                         <div class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
                             ${problem ? 'INCIDENCIA' : 'ESTABLE'}
                         </div>
-                        <button onclick="deleteChannel(${channel.id})" class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        // ==================== CRUD ====================
-        async function addChannel() {
-            const number = document.getElementById('channel-number').value.trim();
-            const name = document.getElementById('channel-name').value.trim();
-            if (!number || !name) {
-                alert("Por favor ingresa el número y nombre del canal");
-                return;
-            }
-            if (channels.some(ch => ch.number === number)) {
-                if (!confirm(`Ya existe un canal con el número ${number}. ¿Agregar de todas formas?`)) return;
-            }
-            channels.push({ id: Date.now(), number, name, image: true, sound: true });
-            await saveChannels();
-            document.getElementById('channel-number').value = '';
-            document.getElementById('channel-name').value = '';
-            renderChannels();
-        }
-
-        async function deleteChannel(id) {
-            if (confirm("¿Eliminar este canal?")) {
-                channels = channels.filter(ch => ch.id !== id);
-                await saveChannels();
-                renderChannels();
-            }
-        }
-
-        async function clearAllChannels() {
-            if (confirm("¿Estás seguro de borrar TODA la lista?\nEsta acción no se puede deshacer.")) {
-                channels = [];
-                await saveChannels();
-                renderChannels();
-            }
-        }
-
-        async function updateImage(id, value) {
-            const ch = channels.find(c => c.id === id);
-            if (ch) ch.image = value;
-            await saveChannels();
-            renderChannels();
-        }
-
-        async function updateSound(id, value) {
-            const ch = channels.find(c => c.id === id);
-            if (ch) ch.sound = value;
-            await saveChannels();
-            renderChannels();
-        }
-
-        // ==================== BUSCADOR ====================
-        function updateSearch(value) {
-            searchQuery = value.toLowerCase().trim();
-            renderChannels();
-        }
-
-        // ==================== OTRAS FUNCIONES ====================
-        function toggleForm() {
-            formVisible = !formVisible;
-            const formContainer = document.getElementById('form-container');
-            const formIcon = document.getElementById('form-icon');
-            formContainer.style.display = formVisible ? 'block' : 'none';
-            formIcon.textContent = formVisible ? '▲' : '▼';
-            localStorage.setItem('formVisible', formVisible);
-        }
-
-        function toggleFilter() {
-            filterOnlyIncidents = !filterOnlyIncidents;
-            const btn = document.getElementById('filter-button');
-            const icon = document.getElementById('filter-icon');
-            const text = document.getElementById('filter-text');
-            if (filterOnlyIncidents) {
-                icon.textContent = '📋';
-                text.textContent = 'TODOS';
-                btn.classList.add('bg-orange-500', 'text-white');
-            } else {
-                icon.textContent = '🔴';
-                text.textContent = 'SOLO INCIDENCIAS';
-                btn.classList.remove('bg-orange-500', 'text-white');
-            }
-            renderChannels();
-        }
-
-        function toggleTheme() {
-            isDarkMode = !isDarkMode;
-            const body = document.body;
-            const toggleBtn = document.getElementById('theme-toggle');
-            if (isDarkMode) {
-                body.classList.remove('light');
-                toggleBtn.innerHTML = '☀️';
-            } else {
-                body.classList.add('light');
-                toggleBtn.innerHTML = '🌙';
-            }
-            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-        }
-
-        function exportData() {
-            if (channels.length === 0) return alert("No hay datos para exportar");
-            let csv = "Número,Nombre,Imagen,Audio,Estado\n";
-            channels.forEach(ch => {
-                const estado = hasProblem(ch) ? "INCIDENCIA" : "ESTABLE";
-                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${estado}\n`;
-            });
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `gpon_tv_${new Date().toISOString().slice(0,10)}.csv`;
-            a.click();
-        }
-
-        function importCSV(input) {
-            const file = input.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                const lines = e.target.result.trim().split('\n');
-                const newChannels = [];
-                for (let i = 1; i < lines.length; i++) {
-                    if (!lines[i].trim()) continue;
-                    const [number, name, image, sound] = lines[i].split(',').map(s => s.trim());
-                    if (number && name) {
-                        newChannels.push({
-                            id: Date.now() + i,
-                            number,
-                            name,
-                            image: image === "SÍ",
-                            sound: sound === "SÍ"
-                        });
-                    }
-                }
-                if (newChannels.length > 0) {
-                    if (channels.length > 0 && !confirm(`¿Reemplazar los ${channels.length} canales actuales?`)) return;
-                    channels = newChannels;
-                    await saveChannels();
-                    filterOnlyIncidents = false;
-                    searchQuery = '';
-                    document.getElementById('search-input').value = '';
-                    renderChannels();
-                    alert(`Se importaron ${newChannels.length} canales`);
-                }
-            };
-            reader.readAsText(file);
-            input.value = '';
-        }
-
-        // ==================== INIT ====================
-        window.onload = async () => {
-            if (localStorage.getItem('theme') === 'light') {
-                isDarkMode = false;
-                document.body.classList.add('light');
-                document.getElementById('theme-toggle').innerHTML = '☀️';
-            }
-            const savedForm = localStorage.getItem('formVisible');
-            formVisible = savedForm !== 'false';
-            const formContainer = document.getElementById('form-container');
-            const formIcon = document.getElementById('form-icon');
-            formContainer.style.display = formVisible ? 'block' : 'none';
-            formIcon.textContent = formVisible ? '▲' : '▼';
-
-            await loadChannels();
-            renderChannels();
-
-            document.getElementById('channel-name').addEventListener('keypress', e => {
-                if (e.key === 'Enter') addChannel();
-            });
-        };
-    </script>
-</body>
-</html>
+                        <button onclick="deleteChannel(${channel.id})" class="ml-3 text-2xl text-slate-400 hover:text-red-400
