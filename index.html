@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPON TV • Reporte de Canales</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
@@ -89,7 +91,7 @@
                 <button onclick="toggleForm()" id="toggle-form-btn"
                         class="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
                     <span id="form-icon">▲</span>
-                    <span id="form-text">PANEL</span>
+                    <span id="form-text">Formulario</span>
                 </button>
             </div>
         </div>
@@ -183,7 +185,7 @@
         let filterOnlyIncidents = false;
         let formVisible = true;
         let isDarkMode = true;
-        let searchQuery = '';   // ← Nueva variable global
+        let searchQuery = '';
 
         // ==================== SUPABASE FUNCTIONS ====================
         async function saveChannels() {
@@ -268,7 +270,6 @@
                 ? channels.filter(ch => hasProblem(ch)) 
                 : [...channels];
 
-            // Aplicar filtro de búsqueda
             if (searchQuery) {
                 displayed = displayed.filter(ch =>
                     ch.number.toString().includes(searchQuery) ||
