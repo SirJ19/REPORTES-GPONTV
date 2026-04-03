@@ -138,15 +138,12 @@
         <div class="flex justify-between items-center mb-5">
             <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
             <div class="flex gap-3">
-                <button onclick="refreshChannels()"
-                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium">
-                    🔄 
-                </button>
+                <!-- BOTÓN DE ACTUALIZAR ELIMINADO -->
                
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium">
                     <span id="filter-icon">🔴</span>
-                    <span id="filter-text">SOLO INCIDENCIAS</span>
+                    <span id="filter-text">FILTRAR INCIDENCIAS</span>
                 </button>
             </div>
         </div>
@@ -238,22 +235,6 @@
             } catch (err) {
                 console.error('loadChannels error:', err);
             }
-        }
-        // ==================== REFRESH FUNCTION ====================
-        async function refreshChannels() {
-            const btn = event.currentTarget;
-            const originalText = btn.innerHTML;
-           
-            btn.innerHTML = `🔄...`;
-            btn.disabled = true;
-           
-            await loadChannels();
-            renderChannels();
-           
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 800);
         }
         // ==================== RENDER ====================
         function renderChannels() {
@@ -405,7 +386,7 @@
                 btn.classList.add('bg-orange-500', 'text-white');
             } else {
                 icon.textContent = '🔴';
-                text.textContent = 'SOLO INCIDENCIAS';
+                text.textContent = 'FILTRAR INCIDENCIAS';
                 btn.classList.remove('bg-orange-500', 'text-white');
             }
             renderChannels();
