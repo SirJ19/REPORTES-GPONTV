@@ -62,197 +62,128 @@
         body.light .text-white { color: #0f172a !important; }
         body.light .text-slate-400 { color: #64748b !important; }
         body.light .channel-card:hover { background-color: #f1f5f9 !important; }
-
-        /* Estilos del bloqueo móvil */
-        #mobile-block {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #0a0a0a;
-            z-index: 9999;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
-            text-align: center;
-            padding: 20px;
-        }
     </style>
 </head>
 <body class="bg-black text-slate-200 min-h-screen font-sans">
-    
-    <!-- BLOQUEO PARA MÓVILES -->
-    <div id="mobile-block" class="hidden flex-col">
-        <div class="text-6xl mb-6">📱</div>
-        <h1 class="text-3xl font-semibold text-white mb-3 tracking-tight">Acceso Restringido</h1>
-        <p class="text-xl text-slate-400 max-w-md">
-            Este sistema solo está disponible en computadoras de escritorio (PC).
-        </p>
-        <p class="text-slate-500 mt-8 text-sm">
-            Por favor, accede desde una computadora para continuar.
-        </p>
+    <div class="max-w-5xl mx-auto px-6 py-8">
+        <!-- HEADER -->
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 bg-orange-0 rounded-2xl flex items-center justify-center text-5xl">📺</div>
+                <div>
+                    <h1 class="text-3xl font-semibold tracking-tight text-orange-500" style="text-shadow: 0 0 10px rgba(249,115,22,0.35), 0 2px 12px rgba(249,115,22,0.18);" > GPON TV </h1>
+                    <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-8">
+                    <div class="text-right">
+                        <div class="text-xs text-slate-400">TOTAL</div>
+                        <div id="total-channels" class="text-4xl font-semibold">0</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-xs text-slate-400">INCIDENCIAS</div>
+                        <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
+                    </div>
+                </div>
+                <button onclick="toggleForm()" id="toggle-form-btn"
+                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
+                    <span id="form-icon">▲</span>
+                    <span id="form-text">Panel</span>
+                </button>
+            </div>
+        </div>
+        <!-- BOTÓN TEMA -->
+        <button onclick="toggleTheme()" id="theme-toggle"
+                class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
+            🌙
+        </button>
+        <!-- FORMULARIO (sin buscador) -->
+        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
+            <div class="flex gap-4">
+                <div class="w-28">
+                    <label class="block text-xs font-medium text-slate-400 mb-1">NÚMERO</label>
+                    <input id="channel-number" type="text" placeholder="7"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-2xl font-mono font-bold outline-none text-center">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-400 mb-1">NOMBRE DEL CANAL</label>
+                    <input id="channel-name" type="text" placeholder="América TV"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-lg outline-none">
+                </div>
+                <button onclick="addChannel()"
+                        class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl text-base shadow-lg">
+                    AGREGAR
+                </button>
+            </div>
+        </div>
+
+        <!-- LISTADO -->
+        <div class="flex justify-between items-center mb-5">
+            <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
+            
+            <div class="flex items-center gap-3 flex-1 justify-end">
+                <!-- Buscador movido aquí -->
+                <div class="relative w-52 md:w-70">
+                    <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+                    <input
+                        id="search-input"
+                        type="text"
+                        placeholder="Buscar canal..."
+                        oninput="updateSearch(this.value)"
+                        class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-5 py-3 text-base outline-none"
+                    >
+                </div>
+
+                <button onclick="toggleFilter()" id="filter-button"
+                        class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
+                    <span id="filter-icon">🔴</span>
+                    <span id="filter-text">FILTRAR INCIDENCIAS</span>
+                </button>
+
+                <button onclick="resetAllStates()"
+                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
+                    🔄 REINICIAR ESTADO
+                </button>
+            </div>
+        </div>
+
+        <div id="channels-list" class="space-y-2"></div>
+        <div id="empty-state" class="hidden text-center py-16">
+            <div class="text-6xl mb-4">📺</div>
+            <h3 id="empty-title" class="text-2xl font-medium text-white">No hay canales aún</h3>
+            <p id="empty-subtitle" class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
+        </div>
     </div>
 
-    <!-- CONTENIDO PRINCIPAL (se oculta en móviles) -->
-    <div id="main-content">
-        <div class="max-w-5xl mx-auto px-6 py-8">
-            <!-- HEADER -->
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 bg-orange-0 rounded-2xl flex items-center justify-center text-5xl">📺</div>
-                    <div>
-                        <h1 class="text-3xl font-semibold tracking-tight text-orange-500" style="text-shadow: 0 0 10px rgba(249,115,22,0.35), 0 2px 12px rgba(249,115,22,0.18);" > GPON TV </h1>
-                        <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="flex items-center gap-8">
-                        <div class="text-right">
-                            <div class="text-xs text-slate-400">TOTAL</div>
-                            <div id="total-channels" class="text-4xl font-semibold">0</div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-xs text-slate-400">INCIDENCIAS</div>
-                            <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
-                        </div>
-                    </div>
-                    <button onclick="toggleForm()" id="toggle-form-btn"
-                            class="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
-                        <span id="form-icon">▲</span>
-                        <span id="form-text">Panel</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- BOTÓN TEMA -->
-            <button onclick="toggleTheme()" id="theme-toggle"
-                    class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
-                🌙
-            </button>
-
-            <!-- FORMULARIO -->
-            <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
-                <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
-                <div class="flex gap-4">
-                    <div class="w-28">
-                        <label class="block text-xs font-medium text-slate-400 mb-1">NÚMERO</label>
-                        <input id="channel-number" type="text" placeholder="7"
-                               class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-2xl font-mono font-bold outline-none text-center">
-                    </div>
-                    <div class="flex-1">
-                        <label class="block text-xs font-medium text-slate-400 mb-1">NOMBRE DEL CANAL</label>
-                        <input id="channel-name" type="text" placeholder="América TV"
-                               class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-lg outline-none">
-                    </div>
-                    <button onclick="addChannel()"
-                            class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl text-base shadow-lg">
-                        AGREGAR
-                    </button>
-                </div>
-            </div>
-
-            <!-- LISTADO -->
-            <div class="flex justify-between items-center mb-5">
-                <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
-               
-                <div class="flex items-center gap-3 flex-1 justify-end">
-                    <div class="relative w-52 md:w-72">
-                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
-                        <input
-                            id="search-input"
-                            type="text"
-                            placeholder="Buscar canal..."
-                            oninput="updateSearch(this.value)"
-                            class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-5 py-3 text-base outline-none"
-                        >
-                    </div>
-                    <button onclick="toggleFilter()" id="filter-button"
-                            class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
-                        <span id="filter-icon">🔴</span>
-                        <span id="filter-text">FILTRAR INCIDENCIAS</span>
-                    </button>
-                    <button onclick="resetAllStates()"
-                            class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
-                        🔄 REINICIAR ESTADO
-                    </button>
-                </div>
-            </div>
-
-            <div id="channels-list" class="space-y-2"></div>
-            <div id="empty-state" class="hidden text-center py-16">
-                <div class="text-6xl mb-4">📺</div>
-                <h3 id="empty-title" class="text-2xl font-medium text-white">No hay canales aún</h3>
-                <p id="empty-subtitle" class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
-            </div>
+    <!-- BARRA INFERIOR -->
+    <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
+        <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
+            <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
+            <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
         </div>
-
-        <!-- BARRA INFERIOR -->
-        <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
-            <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
-                <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
-                <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
-            </div>
-            <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
-                Exportar CSV
-            </button>
-            <label class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl cursor-pointer">
-                Importar CSV
-                <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
-            </label>
-        </div>
+        <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
+            Exportar CSV
+        </button>
+        <label class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl cursor-pointer">
+            Importar CSV
+            <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
+        </label>
     </div>
 
     <script>
-        // ==================== DETECCIÓN DE DISPOSITIVO ====================
-        function isMobileDevice() {
-            const userAgent = navigator.userAgent.toLowerCase();
-            
-            // Detectar dispositivos móviles comunes
-            const mobileKeywords = [
-                'android', 'iphone', 'ipad', 'ipod', 'blackberry', 
-                'windows phone', 'webos', 'iemobile', 'opera mini', 
-                'mobile', 'tablet'
-            ];
-            
-            // Verificar por userAgent
-            const isMobileUA = mobileKeywords.some(keyword => userAgent.includes(keyword));
-            
-            // Refuerzo por tamaño de pantalla (evita falsos positivos en laptops pequeñas)
-            const isSmallScreen = window.innerWidth < 1024 || window.innerHeight < 600;
-            
-            // Si es claramente móvil por UA o combinación de pantalla muy pequeña + UA móvil
-            return isMobileUA || (isSmallScreen && /mobi|tablet|android|iphone/i.test(userAgent));
-        }
-
-        // Función que se ejecuta al cargar la página
-        function checkDeviceAccess() {
-            const mobileBlock = document.getElementById('mobile-block');
-            const mainContent = document.getElementById('main-content');
-
-            if (isMobileDevice()) {
-                // Ocultar contenido principal y mostrar mensaje de bloqueo
-                mainContent.style.display = 'none';
-                mobileBlock.style.display = 'flex';
-            } else {
-                // Mostrar contenido normal en PC
-                mainContent.style.display = 'block';
-                mobileBlock.style.display = 'none';
-            }
-        }
-
         // ==================== SUPABASE CONFIG ====================
         const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co';
         const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf';
         const sb = window.supabase.createClient(supabaseUrl, supabaseKey);
-   
+    
         let channels = [];
         let filterOnlyIncidents = false;
         let formVisible = true;
         let isDarkMode = true;
         let searchQuery = '';
-      
+       
         // ==================== SUPABASE FUNCTIONS ====================
         async function saveChannels() {
             try {
@@ -289,7 +220,6 @@
                 alert('Error de conexión con Supabase');
             }
         }
-
         async function loadChannels() {
             try {
                 const { data, error } = await sb
@@ -312,6 +242,7 @@
             }
         }
 
+        // ==================== NUEVA FUNCIÓN: REINICIAR ESTADOS ====================
         async function resetAllStates() {
             if (channels.length === 0) return;
             if (!confirm("¿Estás seguro de reiniciar todos los estados?\nTodos los canales pasarán a ESTABLE (Imagen y Audio: SÍ)")) {
@@ -325,9 +256,8 @@
             renderChannels();
         }
 
-        // ==================== RENDER Y DEMÁS FUNCIONES (sin cambios) ====================
+        // ==================== RENDER ====================
         function renderChannels() {
-            // ... (todo tu código de renderChannels se mantiene igual)
             sortChannels();
             const container = document.getElementById('channels-list');
             const empty = document.getElementById('empty-state');
@@ -336,15 +266,18 @@
             const viewTitle = document.getElementById('view-title');
             const footerDot = document.getElementById('footer-dot');
             const footerText = document.getElementById('footer-text');
+
             let displayed = filterOnlyIncidents
                 ? channels.filter(ch => hasProblem(ch))
                 : [...channels];
+
             if (searchQuery) {
                 displayed = displayed.filter(ch =>
                     ch.number.toString().includes(searchQuery) ||
                     ch.name.toLowerCase().includes(searchQuery)
                 );
             }
+
             totalEl.textContent = channels.length;
             const incidentCount = channels.filter(ch => hasProblem(ch)).length;
             incidentsEl.textContent = incidentCount;
@@ -352,15 +285,17 @@
             footerDot.className = incidentCount > 0
                 ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"
                 : "w-3.5 h-3.5 bg-orange-500 rounded-full";
+
             viewTitle.textContent = filterOnlyIncidents
                 ? `Canales con incidencias (${displayed.length})`
                 : `Todos los canales (${channels.length})`;
+
             container.innerHTML = '';
             if (displayed.length === 0) {
                 empty.classList.remove('hidden');
                 const title = document.getElementById('empty-title');
                 const subtitle = document.getElementById('empty-subtitle');
-           
+            
                 if (searchQuery) {
                     title.textContent = "No se encontraron canales";
                     subtitle.textContent = "Prueba con otro número o nombre";
@@ -371,6 +306,7 @@
                 return;
             }
             empty.classList.add('hidden');
+
             displayed.forEach(channel => {
                 const problem = hasProblem(channel);
                 const card = document.createElement('div');
@@ -409,6 +345,7 @@
             });
         }
 
+        // ==================== HELPERS ====================
         function hasProblem(channel) {
             return !channel.image || !channel.sound;
         }
@@ -416,6 +353,7 @@
             channels.sort((a, b) => parseInt(a.number) - parseInt(b.number));
         }
 
+        // ==================== CRUD ====================
         async function addChannel() {
             const number = document.getElementById('channel-number').value.trim();
             const name = document.getElementById('channel-name').value.trim();
@@ -455,11 +393,13 @@
             renderChannels();
         }
 
+        // ==================== BUSCADOR (lógica sin cambios) ====================
         function updateSearch(value) {
             searchQuery = value.toLowerCase().trim();
             renderChannels();
         }
 
+        // ==================== OTRAS FUNCIONES ====================
         function toggleForm() {
             formVisible = !formVisible;
             const formContainer = document.getElementById('form-container');
@@ -476,7 +416,7 @@
             const text = document.getElementById('filter-text');
             if (filterOnlyIncidents) {
                 icon.textContent = '📋';
-                text.textContent = 'TODOS';
+                text.textContent = 'FILTRAR TODOS';
                 btn.classList.add('bg-orange-500', 'text-white');
             } else {
                 icon.textContent = '🔴';
@@ -552,13 +492,6 @@
 
         // ==================== INIT ====================
         window.onload = async () => {
-            // Primero verificamos el dispositivo
-            checkDeviceAccess();
-
-            // Si es móvil, no cargamos nada más
-            if (isMobileDevice()) return;
-
-            // Código normal para PC
             if (localStorage.getItem('theme') === 'light') {
                 isDarkMode = false;
                 document.body.classList.add('light');
