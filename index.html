@@ -5,32 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GPON TV • Reporte de Canales</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
-  
+
         * {
             transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
             transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
             transition-duration: 150ms;
         }
-  
+
         .channel-card {
             transition: all 0.2s ease;
         }
-  
+
         .channel-card:hover {
             background-color: #1a1a1a;
         }
-  
+
         .switch {
             position: relative;
             display: inline-block;
             width: 48px;
             height: 26px;
         }
-  
+
         .switch input { opacity: 0; width: 0; height: 0; }
-  
+
         .slider {
             position: absolute;
             cursor: pointer;
@@ -39,7 +40,7 @@
             border-radius: 9999px;
             border: 2px solid #555555;
         }
-  
+
         .slider:before {
             position: absolute;
             content: "";
@@ -50,51 +51,38 @@
             background-color: white;
             border-radius: 50%;
         }
-  
+
         input:checked + .slider {
             background-color: #22c55e;
             border-color: #22c55e;
         }
-  
+
         input:checked + .slider:before {
             transform: translateX(22px);
         }
 
-        /* ESTABLE - Blanco en ambos modos (oscuro y claro) */
         .status-ok {
             background-color: #22c55e;
             color: #ffffff !important;
             font-weight: 700;
         }
-
-        /* Aseguramos que en modo claro también sea blanco */
         body.light .status-ok {
             color: #ffffff !important;
         }
-
         .status-problem {
             background-color: #ef4444;
             color: #ffffff;
             font-weight: 700;
         }
-
         .status-text {
             font-family: 'Inter', system_ui, sans-serif;
             font-size: 1rem;
             font-weight: 600;
             letter-spacing: 0.5px;
         }
-        .text-yes {
-            color: #22c55e;
-            font-weight: 700;
-        }
-        .text-no {
-            color: #ef4444;
-            font-weight: 700;
-            letter-spacing: 1px;
-        }
+        .text-yes { color: #22c55e; font-weight: 700; }
+        .text-no { color: #ef4444; font-weight: 700; letter-spacing: 1px; }
 
-        /* === MODO CLARO === */
         body.light {
             background-color: #f8fafc;
             color: #0f172a;
@@ -112,7 +100,7 @@
 </head>
 <body class="bg-black text-slate-200 min-h-screen font-sans">
     <div class="max-w-5xl mx-auto px-6 py-8">
-  
+
         <!-- HEADER -->
         <div class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-4">
@@ -122,7 +110,7 @@
                     <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
                 </div>
             </div>
-      
+     
             <div class="flex items-center gap-4">
                 <div class="flex items-center gap-8">
                     <div class="text-right">
@@ -174,13 +162,13 @@
         <!-- LISTADO -->
         <div class="flex justify-between items-center mb-5">
             <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
-      
+     
             <div class="flex gap-3">
                 <button onclick="clearAllChannels()"
                         class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-red-500/10 hover:text-red-400 border border-zinc-800 rounded-3xl text-sm font-medium">
                     🗑️ BORRAR TODO
                 </button>
-           
+          
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium">
                     <span id="filter-icon">🔴</span>
@@ -188,7 +176,6 @@
                 </button>
             </div>
         </div>
-
         <div id="channels-list" class="space-y-2"></div>
 
         <!-- Mensaje vacío -->
@@ -205,12 +192,12 @@
             <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
             <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
         </div>
-      
-        <button onclick="exportData()" 
+     
+        <button onclick="exportData()"
                 class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
             Exportar CSV
         </button>
-        
+       
         <label class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl cursor-pointer">
             Importar CSV
             <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
@@ -218,32 +205,57 @@
     </div>
 
     <script>
+        // ==================== SUPABASE CONFIG ====================
+        const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co'
+        const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf'
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey)
+
         let channels = []
         let filterOnlyIncidents = false
         let formVisible = true
         let isDarkMode = true
 
-        function saveToLocalStorage() {
-            localStorage.setItem('tvMonitorChannels', JSON.stringify(channels))
-            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light')
-            localStorage.setItem('formVisible', formVisible)
+        // ==================== SUPABASE FUNCTIONS ====================
+        async function saveChannels() {
+            // Borra todos los registros anteriores
+            await supabase.from('GPONTV CANALES').delete().neq('id', 0)
+            
+            if (channels.length > 0) {
+                const { error } = await supabase.from('GPONTV CANALES').insert(
+                    channels.map(ch => ({
+                        number: ch.number,
+                        name: ch.name,
+                        image: ch.image,
+                        sound: ch.sound
+                    }))
+                )
+                if (error) console.error('Error guardando en Supabase:', error)
+            }
         }
 
-        function loadFromLocalStorage() {
-            const saved = localStorage.getItem('tvMonitorChannels')
-            if (saved) channels = JSON.parse(saved)
+        async function loadChannels() {
+            const { data, error } = await supabase
+                .from('GPONTV CANALES')
+                .select('*')
+                .order('number', { ascending: true })
 
-            const savedTheme = localStorage.getItem('theme')
-            if (savedTheme === 'light') {
-                isDarkMode = false
-                document.body.classList.add('light')
-                document.getElementById('theme-toggle').innerHTML = '☀️'
+            if (error) {
+                console.error('Error cargando canales:', error)
+                return
             }
 
-            const savedForm = localStorage.getItem('formVisible')
-            if (savedForm !== null) formVisible = savedForm === 'true'
+            if (data) {
+                channels = data.map(ch => ({
+                    id: ch.id,
+                    number: ch.number,
+                    name: ch.name,
+                    image: ch.image,
+                    sound: ch.sound
+                }))
+            }
         }
 
+        // ==================== HELPERS ====================
         function hasProblem(channel) {
             return !channel.image || !channel.sound
         }
@@ -252,6 +264,7 @@
             channels.sort((a, b) => parseInt(a.number) - parseInt(b.number))
         }
 
+        // ==================== RENDER ====================
         function renderChannels() {
             sortChannels()
             const container = document.getElementById('channels-list')
@@ -262,20 +275,20 @@
             const footerDot = document.getElementById('footer-dot')
             const footerText = document.getElementById('footer-text')
 
-            let displayed = filterOnlyIncidents 
-                ? channels.filter(ch => hasProblem(ch)) 
+            let displayed = filterOnlyIncidents
+                ? channels.filter(ch => hasProblem(ch))
                 : channels
 
             totalEl.textContent = channels.length
             const incidentCount = channels.filter(ch => hasProblem(ch)).length
             incidentsEl.textContent = incidentCount
             footerText.textContent = `${incidentCount} incidencias`
-            footerDot.className = incidentCount > 0 
-                ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse" 
+            footerDot.className = incidentCount > 0
+                ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"
                 : "w-3.5 h-3.5 bg-orange-500 rounded-full"
 
-            viewTitle.textContent = filterOnlyIncidents 
-                ? `Canales con incidencias (${displayed.length})` 
+            viewTitle.textContent = filterOnlyIncidents
+                ? `Canales con incidencias (${displayed.length})`
                 : `Todos los canales (${channels.length})`
 
             container.innerHTML = ''
@@ -324,7 +337,7 @@
                         <div class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
                             ${problem ? 'INCIDENCIA' : 'ESTABLE'}
                         </div>
-                        <button onclick="deleteChannel(${channel.id})" 
+                        <button onclick="deleteChannel(${channel.id})"
                                 class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
                     </div>
                 `
@@ -332,29 +345,16 @@
             })
         }
 
-        function toggleForm() {
-            formVisible = !formVisible
-            const formContainer = document.getElementById('form-container')
-            const formIcon = document.getElementById('form-icon')
-            
-            if (formVisible) {
-                formContainer.style.display = 'block'
-                formIcon.textContent = '▲'
-            } else {
-                formContainer.style.display = 'none'
-                formIcon.textContent = '▼'
-            }
-            saveToLocalStorage()
-        }
-
-        function addChannel() {
+        // ==================== CRUD ASYNC ====================
+        async function addChannel() {
             const number = document.getElementById('channel-number').value.trim()
             const name = document.getElementById('channel-name').value.trim()
-            
+
             if (!number || !name) {
                 alert("Por favor ingresa el número y nombre del canal")
                 return
             }
+
             if (channels.some(ch => ch.number === number)) {
                 if (!confirm(`Ya existe un canal con el número ${number}. ¿Agregar de todas formas?`)) return
             }
@@ -367,40 +367,56 @@
                 sound: true
             })
 
-            saveToLocalStorage()
+            await saveChannels()
             document.getElementById('channel-number').value = ''
             document.getElementById('channel-name').value = ''
             renderChannels()
         }
 
-        function deleteChannel(id) {
+        async function deleteChannel(id) {
             if (confirm("¿Eliminar este canal?")) {
                 channels = channels.filter(ch => ch.id !== id)
-                saveToLocalStorage()
+                await saveChannels()
                 renderChannels()
             }
         }
 
-        function clearAllChannels() {
+        async function clearAllChannels() {
             if (confirm("¿Estás seguro de borrar TODA la lista de canales?\n\nEsta acción no se puede deshacer.")) {
                 channels = []
-                saveToLocalStorage()
+                await saveChannels()
                 renderChannels()
             }
         }
 
-        function updateImage(id, value) {
+        async function updateImage(id, value) {
             const ch = channels.find(c => c.id === id)
             if (ch) ch.image = value
-            saveToLocalStorage()
+            await saveChannels()
             renderChannels()
         }
 
-        function updateSound(id, value) {
+        async function updateSound(id, value) {
             const ch = channels.find(c => c.id === id)
             if (ch) ch.sound = value
-            saveToLocalStorage()
+            await saveChannels()
             renderChannels()
+        }
+
+        // ==================== OTRAS FUNCIONES ====================
+        function toggleForm() {
+            formVisible = !formVisible
+            const formContainer = document.getElementById('form-container')
+            const formIcon = document.getElementById('form-icon')
+           
+            if (formVisible) {
+                formContainer.style.display = 'block'
+                formIcon.textContent = '▲'
+            } else {
+                formContainer.style.display = 'none'
+                formIcon.textContent = '▼'
+            }
+            localStorage.setItem('formVisible', formVisible)
         }
 
         function toggleFilter() {
@@ -421,15 +437,28 @@
             renderChannels()
         }
 
+        function toggleTheme() {
+            isDarkMode = !isDarkMode
+            const body = document.body
+            const toggleBtn = document.getElementById('theme-toggle')
+
+            if (isDarkMode) {
+                body.classList.remove('light')
+                toggleBtn.innerHTML = '☀️'
+            } else {
+                body.classList.add('light')
+                toggleBtn.innerHTML = '🌙'
+            }
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light')
+        }
+
         function exportData() {
             if (channels.length === 0) return alert("No hay datos para exportar")
-
             let csv = "Número,Nombre,Imagen,Audio,Estado\n"
             channels.forEach(ch => {
                 const estado = hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"
                 csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${estado}\n`
             })
-
             const blob = new Blob([csv], { type: 'text/csv' })
             const url = URL.createObjectURL(blob)
             const a = document.createElement('a')
@@ -441,9 +470,8 @@
         function importCSV(input) {
             const file = input.files[0]
             if (!file) return
-
             const reader = new FileReader()
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 const text = e.target.result
                 const lines = text.trim().split('\n')
                 const newChannels = []
@@ -451,7 +479,7 @@
                 for (let i = 1; i < lines.length; i++) {
                     if (!lines[i].trim()) continue
                     const [number, name, image, sound] = lines[i].split(',').map(s => s.trim())
-                    
+                   
                     if (number && name) {
                         newChannels.push({
                             id: Date.now() + i,
@@ -469,7 +497,7 @@
                         return
                     }
                     channels = newChannels
-                    saveToLocalStorage()
+                    await saveChannels()
                     filterOnlyIncidents = false
                     renderChannels()
                     alert(`Se importaron ${newChannels.length} canales correctamente`)
@@ -481,37 +509,29 @@
             input.value = ''
         }
 
-        function toggleTheme() {
-            isDarkMode = !isDarkMode
-            const body = document.body
-            const toggleBtn = document.getElementById('theme-toggle')
-
-            if (isDarkMode) {
-                body.classList.remove('light')
-                toggleBtn.innerHTML = '☀️'
-            } else {
-                body.classList.add('light')
-                toggleBtn.innerHTML = '🌙'
+        // ==================== INIT ====================
+        window.onload = async () => {
+            // Cargar tema y visibilidad del formulario (local)
+            const savedTheme = localStorage.getItem('theme')
+            if (savedTheme === 'light') {
+                isDarkMode = false
+                document.body.classList.add('light')
+                document.getElementById('theme-toggle').innerHTML = '☀️'
             }
-            saveToLocalStorage()
-        }
 
-        window.onload = () => {
-            loadFromLocalStorage()
-
+            const savedForm = localStorage.getItem('formVisible')
+            formVisible = savedForm !== 'false'
+            
             const formContainer = document.getElementById('form-container')
             const formIcon = document.getElementById('form-icon')
+            formContainer.style.display = formVisible ? 'block' : 'none'
+            formIcon.textContent = formVisible ? '▲' : '▼'
 
-            if (formVisible) {
-                formContainer.style.display = 'block'
-                formIcon.textContent = '▲'
-            } else {
-                formContainer.style.display = 'none'
-                formIcon.textContent = '▼'
-            }
-
+            // Cargar canales desde Supabase
+            await loadChannels()
             renderChannels()
 
+            // Enter para agregar canal
             document.getElementById('channel-name').addEventListener('keypress', e => {
                 if (e.key === 'Enter') addChannel()
             })
