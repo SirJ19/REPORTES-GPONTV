@@ -75,6 +75,9 @@
                     <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
                 </div>
             </div>
+            
+            <div id="current-datetime" class="font-mono text-sm text-slate-400 tracking-widest"></div>
+            
             <div class="flex items-center gap-4">
                 <div class="flex items-center gap-8">
                     <div class="text-right">
@@ -118,11 +121,10 @@
                 </button>
             </div>
         </div>
-
         <!-- LISTADO -->
         <div class="flex justify-between items-center mb-5">
             <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
-            
+           
             <div class="flex items-center gap-3 flex-1 justify-end">
                 <!-- Buscador movido aquí -->
                 <div class="relative w-64 md:w-77">
@@ -135,20 +137,17 @@
                         class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-5 py-3 text-base outline-none"
                     >
                 </div>
-
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
                     <span id="filter-icon">🔴</span>
                     <span id="filter-text">FILTRAR INCIDENCIAS</span>
                 </button>
-
                 <button onclick="resetAllStates()"
                         class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
                     🔄 REINICIAR ESTADO
                 </button>
             </div>
         </div>
-
         <div id="channels-list" class="space-y-2"></div>
         <div id="empty-state" class="hidden text-center py-16">
             <div class="text-6xl mb-4">📺</div>
@@ -156,7 +155,6 @@
             <p id="empty-subtitle" class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
         </div>
     </div>
-
     <!-- BARRA INFERIOR -->
     <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
         <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
@@ -171,19 +169,18 @@
             <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
         </label>
     </div>
-
     <script>
         // ==================== SUPABASE CONFIG ====================
         const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co';
         const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf';
         const sb = window.supabase.createClient(supabaseUrl, supabaseKey);
-    
+   
         let channels = [];
         let filterOnlyIncidents = false;
         let formVisible = true;
         let isDarkMode = true;
         let searchQuery = '';
-       
+      
         // ==================== SUPABASE FUNCTIONS ====================
         async function saveChannels() {
             try {
@@ -241,7 +238,6 @@
                 console.error('loadChannels error:', err);
             }
         }
-
         // ==================== NUEVA FUNCIÓN: REINICIAR ESTADOS ====================
         async function resetAllStates() {
             if (channels.length === 0) return;
@@ -255,7 +251,6 @@
             await saveChannels();
             renderChannels();
         }
-
         // ==================== RENDER ====================
         function renderChannels() {
             sortChannels();
@@ -266,18 +261,15 @@
             const viewTitle = document.getElementById('view-title');
             const footerDot = document.getElementById('footer-dot');
             const footerText = document.getElementById('footer-text');
-
             let displayed = filterOnlyIncidents
                 ? channels.filter(ch => hasProblem(ch))
                 : [...channels];
-
             if (searchQuery) {
                 displayed = displayed.filter(ch =>
                     ch.number.toString().includes(searchQuery) ||
                     ch.name.toLowerCase().includes(searchQuery)
                 );
             }
-
             totalEl.textContent = channels.length;
             const incidentCount = channels.filter(ch => hasProblem(ch)).length;
             incidentsEl.textContent = incidentCount;
@@ -285,17 +277,15 @@
             footerDot.className = incidentCount > 0
                 ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"
                 : "w-3.5 h-3.5 bg-orange-500 rounded-full";
-
             viewTitle.textContent = filterOnlyIncidents
                 ? `Canales con incidencias (${displayed.length})`
                 : `Todos los canales (${channels.length})`;
-
             container.innerHTML = '';
             if (displayed.length === 0) {
                 empty.classList.remove('hidden');
                 const title = document.getElementById('empty-title');
                 const subtitle = document.getElementById('empty-subtitle');
-            
+           
                 if (searchQuery) {
                     title.textContent = "No se encontraron canales";
                     subtitle.textContent = "Prueba con otro número o nombre";
@@ -306,7 +296,6 @@
                 return;
             }
             empty.classList.add('hidden');
-
             displayed.forEach(channel => {
                 const problem = hasProblem(channel);
                 const card = document.createElement('div');
@@ -344,13 +333,26 @@
                 container.appendChild(card);
             });
         }
-
         // ==================== HELPERS ====================
         function hasProblem(channel) {
             return !channel.image || !channel.sound;
         }
         function sortChannels() {
             channels.sort((a, b) => parseInt(a.number) - parseInt(b.number));
+        }
+
+        // ==================== DATETIME ====================
+        function updateDateTime() {
+            const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Lima" }));
+            const pad = (n) => n.toString().padStart(2, '0');
+            const dd = pad(now.getDate());
+            const mm = pad(now.getMonth() + 1);
+            const yyyy = now.getFullYear();
+            const hh = pad(now.getHours());
+            const min = pad(now.getMinutes());
+            const datetimeStr = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+            const el = document.getElementById('current-datetime');
+            if (el) el.textContent = datetimeStr;
         }
 
         // ==================== CRUD ====================
@@ -370,7 +372,6 @@
             document.getElementById('channel-name').value = '';
             renderChannels();
         }
-
         async function deleteChannel(id) {
             if (confirm("¿Eliminar este canal?")) {
                 channels = channels.filter(ch => ch.id !== id);
@@ -378,27 +379,23 @@
                 renderChannels();
             }
         }
-
         async function updateImage(id, value) {
             const ch = channels.find(c => c.id === id);
             if (ch) ch.image = value;
             await saveChannels();
             renderChannels();
         }
-
         async function updateSound(id, value) {
             const ch = channels.find(c => c.id === id);
             if (ch) ch.sound = value;
             await saveChannels();
             renderChannels();
         }
-
         // ==================== BUSCADOR (lógica sin cambios) ====================
         function updateSearch(value) {
             searchQuery = value.toLowerCase().trim();
             renderChannels();
         }
-
         // ==================== OTRAS FUNCIONES ====================
         function toggleForm() {
             formVisible = !formVisible;
@@ -408,7 +405,6 @@
             formIcon.textContent = formVisible ? '▲' : '▼';
             localStorage.setItem('formVisible', formVisible);
         }
-
         function toggleFilter() {
             filterOnlyIncidents = !filterOnlyIncidents;
             const btn = document.getElementById('filter-button');
@@ -425,7 +421,6 @@
             }
             renderChannels();
         }
-
         function toggleTheme() {
             isDarkMode = !isDarkMode;
             const body = document.body;
@@ -439,7 +434,6 @@
             }
             localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
         }
-
         function exportData() {
             if (channels.length === 0) return alert("No hay datos para exportar");
             let csv = "Número,Nombre,Imagen,Audio,Estado\n";
@@ -454,7 +448,6 @@
             a.download = `gpon_tv_${new Date().toISOString().slice(0,10)}.csv`;
             a.click();
         }
-
         function importCSV(input) {
             const file = input.files[0];
             if (!file) return;
@@ -489,7 +482,6 @@
             reader.readAsText(file);
             input.value = '';
         }
-
         // ==================== INIT ====================
         window.onload = async () => {
             if (localStorage.getItem('theme') === 'light') {
@@ -503,10 +495,14 @@
             const formIcon = document.getElementById('form-icon');
             formContainer.style.display = formVisible ? 'block' : 'none';
             formIcon.textContent = formVisible ? '▲' : '▼';
-
+            
             await loadChannels();
             renderChannels();
-
+            
+            // Inicializar fecha y hora
+            updateDateTime();
+            setInterval(updateDateTime, 1000);
+            
             document.getElementById('channel-name').addEventListener('keypress', e => {
                 if (e.key === 'Enter') addChannel();
             });
