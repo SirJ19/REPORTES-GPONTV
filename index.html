@@ -50,7 +50,7 @@
         }
         .status-ok { background-color: #22c55e; color: #ffffff !important; font-weight: 700; }
         .status-problem { background-color: #ef4444; color: #ffffff; font-weight: 700; }
-        .status-text { font-family: 'Inter', system_ui, sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: 0.5px; }
+        .status-text { font-family: 'Inter', system-ui, sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: 0.5px; }
         .text-yes { color: #22c55e; font-weight: 700; }
         .text-no { color: #ef4444; font-weight: 700; letter-spacing: 1px; }
         body.light { background-color: #f8fafc; color: #0f172a; }
@@ -62,16 +62,41 @@
         body.light .text-white { color: #0f172a !important; }
         body.light .text-slate-400 { color: #64748b !important; }
         body.light .channel-card:hover { background-color: #f1f5f9 !important; }
+
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999; backdrop-filter: blur(4px);
+        }
+        #loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #333;
+            border-top-color: #f97316;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-black text-slate-200 min-h-screen font-sans">
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay">
+        <div class="flex flex-col items-center gap-4">
+            <div class="spinner"></div>
+            <span class="text-slate-400 text-sm">Cargando...</span>
+        </div>
+    </div>
+
     <div class="max-w-5xl mx-auto px-6 py-8">
         <!-- HEADER -->
         <div class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-4">
                 <div class="w-10 h-10 bg-orange-0 rounded-2xl flex items-center justify-center text-5xl">📺</div>
                 <div>
-                    <h1 class="text-3xl font-semibold tracking-tight text-orange-500" style="text-shadow: 0 0 10px rgba(249,115,22,0.35), 0 2px 12px rgba(249,115,22,0.18);" > GPON TV </h1>
+                    <h1 class="text-3xl font-semibold tracking-tight text-orange-500" style="text-shadow: 0 0 10px rgba(249,115,22,0.35), 0 2px 12px rgba(249,115,22,0.18);">GPON TV</h1>
                     <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
                 </div>
             </div>
@@ -96,12 +121,14 @@
                 </button>
             </div>
         </div>
+
         <!-- BOTÓN TEMA -->
         <button onclick="toggleTheme()" id="theme-toggle"
                 class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
             🌙
         </button>
-        <!-- FORMULARIO (sin buscador) -->
+
+        <!-- FORMULARIO -->
         <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
             <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
             <div class="flex gap-4">
@@ -121,12 +148,12 @@
                 </button>
             </div>
         </div>
+
         <!-- LISTADO -->
         <div class="flex justify-between items-center mb-5">
             <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
            
             <div class="flex items-center gap-3 flex-1 justify-end">
-                <!-- Buscador movido aquí -->
                 <div class="relative w-64 md:w-77">
                     <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
                     <input
@@ -148,6 +175,7 @@
                 </button>
             </div>
         </div>
+
         <div id="channels-list" class="space-y-2"></div>
         <div id="empty-state" class="hidden text-center py-16">
             <div class="text-6xl mb-4">📺</div>
@@ -155,12 +183,22 @@
             <p id="empty-subtitle" class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
         </div>
     </div>
+
     <!-- BARRA INFERIOR -->
     <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
         <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
             <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
             <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
         </div>
+        <!-- Separador -->
+        <div class="w-px h-4 bg-zinc-700"></div>
+        <!-- Indicador realtime -->
+        <div class="flex items-center gap-1.5" title="Estado de sincronización en tiempo real">
+            <div id="realtime-dot" class="w-2 h-2 rounded-full bg-yellow-400"></div>
+            <span id="realtime-label" class="text-xs text-slate-500 font-mono tracking-wide">CONECTANDO…</span>
+        </div>
+        <!-- Separador -->
+        <div class="w-px h-4 bg-zinc-700"></div>
         <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
             Exportar CSV
         </button>
@@ -168,99 +206,132 @@
             Importar CSV
             <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
         </label>
+        <button onclick="deleteAllChannels()" class="text-xs px-4 py-1.5 hover:bg-red-500/10 hover:text-red-400 border border-zinc-800 rounded-2xl transition-colors">
+            🗑 Eliminar todo
+        </button>
     </div>
+
     <script>
         // ==================== SUPABASE CONFIG ====================
         const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co';
         const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf';
-        const sb = window.supabase.createClient(supabaseUrl, supabaseKey);
-   
+        const sb = window.supabase.createClient(supabaseUrl, supabaseKey, {
+            realtime: { params: { eventsPerSecond: 20 } }
+        });
+
         let channels = [];
         let filterOnlyIncidents = false;
         let formVisible = true;
         let isDarkMode = true;
         let searchQuery = '';
-      
-        // ==================== SUPABASE FUNCTIONS ====================
-        async function saveChannels() {
-            try {
-                await sb.from('GPONTV').delete().gte('id', 0);
-                if (channels.length > 0) {
-                    const { data: inserted, error } = await sb
-                        .from('GPONTV')
-                        .insert(
-                            channels.map(ch => ({
-                                number: ch.number,
-                                name: ch.name,
-                                image: ch.image,
-                                sound: ch.sound
-                            }))
-                        )
-                        .select();
-                    if (error) {
-                        console.error('Insert error:', error);
-                        alert('Error al guardar: ' + error.message);
-                        return;
-                    }
-                    if (inserted) {
-                        channels = inserted.map((ch, i) => ({
-                            id: ch.id,
-                            number: ch.number,
-                            name: ch.name,
-                            image: channels[i].image,
-                            sound: channels[i].sound
-                        }));
-                    }
-                }
-            } catch (err) {
-                console.error('saveChannels error:', err);
-                alert('Error de conexión con Supabase');
-            }
+
+        // ==================== MUTEX ====================
+        // Previene que operaciones pesadas corran en paralelo en la misma pestaña.
+        // Los toggles de imagen/audio quedan fuera del mutex para no bloquear la UI.
+        let operationInProgress = false;
+
+        async function withLock(fn) {
+            if (operationInProgress) return;
+            operationInProgress = true;
+            showLoading(true);
+            try { await fn(); }
+            finally { operationInProgress = false; showLoading(false); }
         }
+
+        function showLoading(show) {
+            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
+        }
+
+        // ==================== DEBOUNCE para toggles ====================
+        // Evita saturar la DB si el usuario mueve el switch varias veces rápido.
+        const pendingUpdates = {}; // { [id]: { timer, fields } }
+
+        function debouncedUpdate(id, fields, delayMs = 400) {
+            if (pendingUpdates[id]) {
+                clearTimeout(pendingUpdates[id].timer);
+                // Fusionar campos pendientes con los nuevos
+                Object.assign(pendingUpdates[id].fields, fields);
+            } else {
+                pendingUpdates[id] = { fields: { ...fields } };
+            }
+            pendingUpdates[id].timer = setTimeout(async () => {
+                const f = pendingUpdates[id].fields;
+                delete pendingUpdates[id];
+                await updateChannelInDB(id, f);
+            }, delayMs);
+        }
+
+        // ==================== SUPABASE: OPERACIONES GRANULARES ====================
+
         async function loadChannels() {
-            try {
-                const { data, error } = await sb
-                    .from('GPONTV')
-                    .select('*')
-                    .order('number', { ascending: true });
-                if (error) {
-                    console.error('Load error:', error);
-                    return;
-                }
-                channels = data ? data.map(ch => ({
-                    id: ch.id,
-                    number: ch.number,
-                    name: ch.name,
-                    image: ch.image,
-                    sound: ch.sound
-                })) : [];
-            } catch (err) {
-                console.error('loadChannels error:', err);
+            const { data, error } = await sb
+                .from('GPONTV').select('*').order('number', { ascending: true });
+            if (error) { console.error('Load error:', error); return; }
+
+            const allRows = data || [];
+            // Deduplicar por número: conservar el de menor id
+            const seen = new Map();
+            const toDelete = [];
+            for (const row of allRows) {
+                const key = String(row.number).trim();
+                if (seen.has(key)) { toDelete.push(row.id); }
+                else { seen.set(key, row); }
             }
+            if (toDelete.length > 0) {
+                console.warn(`Limpiando ${toDelete.length} duplicado(s)`, toDelete);
+                await sb.from('GPONTV').delete().in('id', toDelete);
+            }
+            channels = Array.from(seen.values()).map(r => ({
+                id: r.id, number: r.number, name: r.name, image: r.image, sound: r.sound
+            }));
         }
-        // ==================== NUEVA FUNCIÓN: REINICIAR ESTADOS ====================
+
+        async function insertChannel(number, name) {
+            const { data, error } = await sb
+                .from('GPONTV')
+                .insert([{ number, name, image: true, sound: true }])
+                .select().single();
+            if (error) { console.error('Insert error:', error); alert('Error al guardar: ' + error.message); return null; }
+            return data;
+        }
+
+        async function updateChannelInDB(id, fields) {
+            const { error } = await sb.from('GPONTV').update(fields).eq('id', id);
+            if (error) console.error('Update error:', error);
+        }
+
+        async function deleteChannelFromDB(id) {
+            const { error } = await sb.from('GPONTV').delete().eq('id', id);
+            if (error) { console.error('Delete error:', error); alert('Error al eliminar: ' + error.message); }
+        }
+
+        async function resetAllInDB() {
+            // Batch update en paralelo
+            await Promise.all(
+                channels.map(ch => sb.from('GPONTV').update({ image: true, sound: true }).eq('id', ch.id))
+            );
+        }
+
+        // ==================== REINICIAR ESTADOS ====================
         async function resetAllStates() {
             if (channels.length === 0) return;
-            if (!confirm("¿Estás seguro de reiniciar todos los estados?\nTodos los canales pasarán a ESTABLE (Imagen y Audio: SÍ)")) {
-                return;
-            }
-            channels.forEach(channel => {
-                channel.image = true;
-                channel.sound = true;
+            if (!confirm("¿Reiniciar todos los estados?\nTodos pasarán a ESTABLE (Imagen y Audio: SÍ)")) return;
+            await withLock(async () => {
+                await resetAllInDB();
+                channels.forEach(ch => { ch.image = true; ch.sound = true; });
+                renderChannels();
             });
-            await saveChannels();
-            renderChannels();
         }
+
         // ==================== RENDER ====================
+        // Renderizado inteligente: actualiza solo counters/badges si los cards no cambiaron.
+        let lastRenderedIds = '';
+
         function renderChannels() {
             sortChannels();
             const container = document.getElementById('channels-list');
-            const empty = document.getElementById('empty-state');
-            const totalEl = document.getElementById('total-channels');
-            const incidentsEl = document.getElementById('incidents-count');
-            const viewTitle = document.getElementById('view-title');
-            const footerDot = document.getElementById('footer-dot');
-            const footerText = document.getElementById('footer-text');
+            const empty    = document.getElementById('empty-state');
+
             let displayed = filterOnlyIncidents
                 ? channels.filter(ch => hasProblem(ch))
                 : [...channels];
@@ -270,184 +341,235 @@
                     ch.name.toLowerCase().includes(searchQuery)
                 );
             }
-            totalEl.textContent = channels.length;
+
+            // Actualizar contadores siempre
             const incidentCount = channels.filter(ch => hasProblem(ch)).length;
-            incidentsEl.textContent = incidentCount;
-            footerText.textContent = `${incidentCount} incidencias`;
-            footerDot.className = incidentCount > 0
+            document.getElementById('total-channels').textContent   = channels.length;
+            document.getElementById('incidents-count').textContent  = incidentCount;
+            document.getElementById('footer-text').textContent      = `${incidentCount} incidencias`;
+            document.getElementById('footer-dot').className = incidentCount > 0
                 ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"
                 : "w-3.5 h-3.5 bg-orange-500 rounded-full";
-            viewTitle.textContent = filterOnlyIncidents
+            document.getElementById('view-title').textContent = filterOnlyIncidents
                 ? `Canales con incidencias (${displayed.length})`
                 : `Todos los canales (${channels.length})`;
-            container.innerHTML = '';
+
             if (displayed.length === 0) {
+                container.innerHTML = '';
                 empty.classList.remove('hidden');
-                const title = document.getElementById('empty-title');
-                const subtitle = document.getElementById('empty-subtitle');
-           
-                if (searchQuery) {
-                    title.textContent = "No se encontraron canales";
-                    subtitle.textContent = "Prueba con otro número o nombre";
-                } else {
-                    title.textContent = "No hay canales aún";
-                    subtitle.textContent = "Agrega canales usando el formulario superior";
-                }
+                document.getElementById('empty-title').textContent    = searchQuery ? "No se encontraron canales" : filterOnlyIncidents ? "Sin incidencias activas" : "No hay canales aún";
+                document.getElementById('empty-subtitle').textContent = searchQuery ? "Prueba con otro número o nombre" : filterOnlyIncidents ? "Todos los canales están estables ✔" : "Agrega canales usando el formulario superior";
+                lastRenderedIds = '';
                 return;
             }
             empty.classList.add('hidden');
-            displayed.forEach(channel => {
-                const problem = hasProblem(channel);
-                const card = document.createElement('div');
-                card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`;
-                card.innerHTML = `
-                    <div class="flex items-center gap-6">
-                        <div class="w-14 text-center">
-                            <div class="text-3xl font-mono font-bold text-orange-400">${channel.number}</div>
-                        </div>
-                        <div><div class="text-xl font-semibold">${channel.name}</div></div>
-                    </div>
-                    <div class="flex items-center gap-8">
-                        <div class="flex items-center gap-3">
-                            <span class="text-white font-medium w-14 text-sm">IMAGEN</span>
-                            <span class="status-text ${channel.image ? 'text-yes' : 'text-no'}">${channel.image ? 'SÍ' : 'NO'}</span>
-                            <label class="switch">
-                                <input type="checkbox" ${channel.image ? 'checked' : ''} onchange="updateImage(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="text-white font-medium w-14 text-sm">AUDIO</span>
-                            <span class="status-text ${channel.sound ? 'text-yes' : 'text-no'}">${channel.sound ? 'SÍ' : 'NO'}</span>
-                            <label class="switch">
-                                <input type="checkbox" ${channel.sound ? 'checked' : ''} onchange="updateSound(${channel.id}, this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </div>
-                        <div class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
-                            ${problem ? 'INCIDENCIA' : 'ESTABLE'}
-                        </div>
-                        <button onclick="deleteChannel(${channel.id})" class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
-                    </div>
-                `;
-                container.appendChild(card);
-            });
+
+            // Fingerprint del estado actual para decidir si reconstruir o actualizar in-place
+            const fingerprint = displayed.map(ch => `${ch.id}:${ch.image}:${ch.sound}`).join('|');
+            const idFingerprint = displayed.map(ch => ch.id).join('|');
+
+            if (idFingerprint !== lastRenderedIds) {
+                // La lista de canales cambió (agregar/borrar) → reconstruir DOM completo
+                lastRenderedIds = idFingerprint;
+                container.innerHTML = '';
+                displayed.forEach(ch => container.appendChild(buildCard(ch)));
+            } else {
+                // Solo estados cambiaron → actualizar in-place sin re-renderizar todo
+                displayed.forEach(ch => {
+                    const existingCard = container.querySelector(`[data-id="${ch.id}"]`);
+                    if (existingCard) updateCardInPlace(existingCard, ch);
+                });
+            }
         }
+
+        function buildCard(channel) {
+            const problem = hasProblem(channel);
+            const card = document.createElement('div');
+            card.dataset.id = channel.id;
+            card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`;
+            card.innerHTML = `
+                <div class="flex items-center gap-6">
+                    <div class="w-14 text-center">
+                        <div class="text-3xl font-mono font-bold text-orange-400">${channel.number}</div>
+                    </div>
+                    <div><div class="text-xl font-semibold">${channel.name}</div></div>
+                </div>
+                <div class="flex items-center gap-8">
+                    <div class="flex items-center gap-3">
+                        <span class="text-white font-medium w-14 text-sm">IMAGEN</span>
+                        <span data-label="image" class="status-text ${channel.image ? 'text-yes' : 'text-no'}">${channel.image ? 'SÍ' : 'NO'}</span>
+                        <label class="switch">
+                            <input type="checkbox" ${channel.image ? 'checked' : ''} onchange="updateImage(${channel.id}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-white font-medium w-14 text-sm">AUDIO</span>
+                        <span data-label="sound" class="status-text ${channel.sound ? 'text-yes' : 'text-no'}">${channel.sound ? 'SÍ' : 'NO'}</span>
+                        <label class="switch">
+                            <input type="checkbox" ${channel.sound ? 'checked' : ''} onchange="updateSound(${channel.id}, this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div data-label="status" class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
+                        ${problem ? 'INCIDENCIA' : 'ESTABLE'}
+                    </div>
+                    <button onclick="deleteChannel(${channel.id})" class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
+                </div>
+            `;
+            return card;
+        }
+
+        function updateCardInPlace(card, channel) {
+            const problem = hasProblem(channel);
+            // Borde del card
+            card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`;
+            // Label IMAGEN
+            const imgLabel = card.querySelector('[data-label="image"]');
+            if (imgLabel) {
+                imgLabel.className = `status-text ${channel.image ? 'text-yes' : 'text-no'}`;
+                imgLabel.textContent = channel.image ? 'SÍ' : 'NO';
+            }
+            // Checkbox IMAGEN
+            const checkboxes = card.querySelectorAll('input[type="checkbox"]');
+            if (checkboxes[0]) checkboxes[0].checked = channel.image;
+            // Label AUDIO
+            const sndLabel = card.querySelector('[data-label="sound"]');
+            if (sndLabel) {
+                sndLabel.className = `status-text ${channel.sound ? 'text-yes' : 'text-no'}`;
+                sndLabel.textContent = channel.sound ? 'SÍ' : 'NO';
+            }
+            if (checkboxes[1]) checkboxes[1].checked = channel.sound;
+            // Badge ESTABLE / INCIDENCIA
+            const badge = card.querySelector('[data-label="status"]');
+            if (badge) {
+                badge.className = `${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center`;
+                badge.textContent = problem ? 'INCIDENCIA' : 'ESTABLE';
+            }
+        }
+
         // ==================== HELPERS ====================
-        function hasProblem(channel) {
-            return !channel.image || !channel.sound;
-        }
-        function sortChannels() {
-            channels.sort((a, b) => parseInt(a.number) - parseInt(b.number));
-        }
+        function hasProblem(ch) { return !ch.image || !ch.sound; }
+        function sortChannels() { channels.sort((a, b) => parseInt(a.number) - parseInt(b.number)); }
 
         // ==================== DATETIME ====================
         function updateDateTime() {
             const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Lima" }));
-            const pad = (n) => n.toString().padStart(2, '0');
-            const dd = pad(now.getDate());
-            const mm = pad(now.getMonth() + 1);
-            const yyyy = now.getFullYear();
-            const hh = pad(now.getHours());
-            const min = pad(now.getMinutes());
-            const datetimeStr = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+            const pad = n => n.toString().padStart(2, '0');
             const el = document.getElementById('current-datetime');
-            if (el) el.textContent = datetimeStr;
+            if (el) el.textContent = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
         }
 
         // ==================== CRUD ====================
         async function addChannel() {
             const number = document.getElementById('channel-number').value.trim();
-            const name = document.getElementById('channel-name').value.trim();
-            if (!number || !name) {
-                alert("Por favor ingresa el número y nombre del canal");
-                return;
+            const name   = document.getElementById('channel-name').value.trim();
+            if (!number || !name) { alert("Por favor ingresa el número y nombre del canal"); return; }
+            if (channels.some(ch => String(ch.number) === String(number))) {
+                if (!confirm(`Ya existe el canal ${number}. ¿Agregar de todas formas?`)) return;
             }
-            if (channels.some(ch => ch.number === number)) {
-                if (!confirm(`Ya existe un canal con el número ${number}. ¿Agregar de todas formas?`)) return;
-            }
-            channels.push({ id: Date.now(), number, name, image: true, sound: true });
-            await saveChannels();
-            document.getElementById('channel-number').value = '';
-            document.getElementById('channel-name').value = '';
-            renderChannels();
+            await withLock(async () => {
+                // Doble check en DB (protección multipestaña)
+                const { data: existing } = await sb.from('GPONTV').select('id').eq('number', number);
+                if (existing && existing.length > 0) {
+                    if (!confirm(`En la base de datos ya existe el canal ${number}. ¿Agregar de todas formas?`)) return;
+                }
+                const newCh = await insertChannel(number, name);
+                if (newCh) {
+                    channels.push({ id: newCh.id, number: newCh.number, name: newCh.name, image: newCh.image, sound: newCh.sound });
+                    document.getElementById('channel-number').value = '';
+                    document.getElementById('channel-name').value = '';
+                    lastRenderedIds = ''; // forzar reconstrucción del DOM
+                    renderChannels();
+                }
+            });
         }
+
         async function deleteChannel(id) {
-            if (confirm("¿Eliminar este canal?")) {
+            if (!confirm("¿Eliminar este canal?")) return;
+            await withLock(async () => {
+                await deleteChannelFromDB(id);
                 channels = channels.filter(ch => ch.id !== id);
-                await saveChannels();
+                lastRenderedIds = '';
                 renderChannels();
-            }
+            });
         }
-        async function updateImage(id, value) {
+
+        function updateImage(id, value) {
             const ch = channels.find(c => c.id === id);
-            if (ch) ch.image = value;
-            await saveChannels();
-            renderChannels();
+            if (!ch) return;
+            ch.image = value;
+            renderChannels(); // instantáneo en UI
+            debouncedUpdate(id, { image: value }); // persiste en DB con debounce
         }
-        async function updateSound(id, value) {
+
+        function updateSound(id, value) {
             const ch = channels.find(c => c.id === id);
-            if (ch) ch.sound = value;
-            await saveChannels();
+            if (!ch) return;
+            ch.sound = value;
             renderChannels();
+            debouncedUpdate(id, { sound: value });
         }
-        // ==================== BUSCADOR (lógica sin cambios) ====================
+
+        // ==================== BUSCADOR ====================
         function updateSearch(value) {
             searchQuery = value.toLowerCase().trim();
             renderChannels();
         }
-        // ==================== OTRAS FUNCIONES ====================
+
+        // ==================== UI TOGGLES ====================
         function toggleForm() {
             formVisible = !formVisible;
-            const formContainer = document.getElementById('form-container');
-            const formIcon = document.getElementById('form-icon');
-            formContainer.style.display = formVisible ? 'block' : 'none';
-            formIcon.textContent = formVisible ? '▲' : '▼';
+            document.getElementById('form-container').style.display = formVisible ? 'block' : 'none';
+            document.getElementById('form-icon').textContent = formVisible ? '▲' : '▼';
             localStorage.setItem('formVisible', formVisible);
         }
+
         function toggleFilter() {
             filterOnlyIncidents = !filterOnlyIncidents;
             const btn = document.getElementById('filter-button');
-            const icon = document.getElementById('filter-icon');
-            const text = document.getElementById('filter-text');
-            if (filterOnlyIncidents) {
-                icon.textContent = '📋';
-                text.textContent = 'FILTRAR TODOS';
-                btn.classList.add('bg-orange-500', 'text-white');
-            } else {
-                icon.textContent = '🔴';
-                text.textContent = 'FILTRAR INCIDENCIAS';
-                btn.classList.remove('bg-orange-500', 'text-white');
-            }
+            document.getElementById('filter-icon').textContent = filterOnlyIncidents ? '📋' : '🔴';
+            document.getElementById('filter-text').textContent = filterOnlyIncidents ? 'FILTRAR TODOS' : 'FILTRAR INCIDENCIAS';
+            btn.classList.toggle('bg-orange-500', filterOnlyIncidents);
+            btn.classList.toggle('text-white', filterOnlyIncidents);
+            lastRenderedIds = '';
             renderChannels();
         }
+
         function toggleTheme() {
             isDarkMode = !isDarkMode;
-            const body = document.body;
-            const toggleBtn = document.getElementById('theme-toggle');
-            if (isDarkMode) {
-                body.classList.remove('light');
-                toggleBtn.innerHTML = '☀️';
-            } else {
-                body.classList.add('light');
-                toggleBtn.innerHTML = '🌙';
-            }
+            document.body.classList.toggle('light', !isDarkMode);
+            document.getElementById('theme-toggle').innerHTML = isDarkMode ? '☀️' : '🌙';
             localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
         }
+
+        // ==================== EXPORT / IMPORT ====================
+        async function deleteAllChannels() {
+            if (channels.length === 0) return alert("No hay canales para eliminar");
+            if (!confirm(`¿Eliminar los ${channels.length} canales? Esta acción no se puede deshacer.`)) return;
+            await withLock(async () => {
+                await sb.from('GPONTV').delete().gte('id', 0);
+                channels = [];
+                lastRenderedIds = '';
+                filterOnlyIncidents = false;
+                searchQuery = '';
+                document.getElementById('search-input').value = '';
+                renderChannels();
+            });
+        }
+
         function exportData() {
             if (channels.length === 0) return alert("No hay datos para exportar");
             let csv = "Número,Nombre,Imagen,Audio,Estado\n";
             channels.forEach(ch => {
-                const estado = hasProblem(ch) ? "INCIDENCIA" : "ESTABLE";
-                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${estado}\n`;
+                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"}\n`;
             });
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
+            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
             a.download = `gpon_tv_${new Date().toISOString().slice(0,10)}.csv`;
             a.click();
         }
+
         function importCSV(input) {
             const file = input.files[0];
             if (!file) return;
@@ -458,30 +580,99 @@
                 for (let i = 1; i < lines.length; i++) {
                     if (!lines[i].trim()) continue;
                     const [number, name, image, sound] = lines[i].split(',').map(s => s.trim());
-                    if (number && name) {
-                        newChannels.push({
-                            id: Date.now() + i,
-                            number,
-                            name,
-                            image: image === "SÍ",
-                            sound: sound === "SÍ"
-                        });
-                    }
+                    if (number && name) newChannels.push({ number, name, image: image === "SÍ", sound: sound === "SÍ" });
                 }
-                if (newChannels.length > 0) {
-                    if (channels.length > 0 && !confirm(`¿Reemplazar los ${channels.length} canales actuales?`)) return;
-                    channels = newChannels;
-                    await saveChannels();
+                if (newChannels.length === 0) { alert("No se encontraron canales válidos en el CSV"); return; }
+                if (channels.length > 0 && !confirm(`¿Reemplazar los ${channels.length} canales actuales con ${newChannels.length} del CSV?`)) return;
+
+                await withLock(async () => {
+                    await sb.from('GPONTV').delete().gte('id', 0);
+                    channels = [];
+                    // Insertar en batch
+                    const { data } = await sb.from('GPONTV').insert(newChannels).select();
+                    if (data) channels = data.map(r => ({ id: r.id, number: r.number, name: r.name, image: r.image, sound: r.sound }));
                     filterOnlyIncidents = false;
                     searchQuery = '';
                     document.getElementById('search-input').value = '';
+                    lastRenderedIds = '';
                     renderChannels();
-                    alert(`Se importaron ${newChannels.length} canales`);
-                }
+                    alert(`Se importaron ${channels.length} canales`);
+                });
             };
             reader.readAsText(file);
             input.value = '';
         }
+
+        // ==================== REALTIME ====================
+        let realtimeChannel = null;
+        let realtimeRetryTimer = null;
+
+        function setRealtimeStatus(status) {
+            // 'connected' | 'disconnected' | 'reconnecting'
+            const dot = document.getElementById('realtime-dot');
+            const label = document.getElementById('realtime-label');
+            if (!dot || !label) return;
+            const map = {
+                connected:    { cls: 'bg-green-500',  text: 'EN VIVO' },
+                disconnected: { cls: 'bg-red-500',    text: 'SIN CONEXIÓN' },
+                reconnecting: { cls: 'bg-yellow-400', text: 'RECONECTANDO…' },
+            };
+            const s = map[status] || map.disconnected;
+            dot.className   = `w-2 h-2 rounded-full ${s.cls} ${status === 'connected' ? 'animate-pulse' : ''}`;
+            label.textContent = s.text;
+        }
+
+        function setupRealtime() {
+            if (realtimeChannel) {
+                sb.removeChannel(realtimeChannel);
+                realtimeChannel = null;
+            }
+            clearTimeout(realtimeRetryTimer);
+            setRealtimeStatus('reconnecting');
+
+            realtimeChannel = sb.channel('gpontv-live', {
+                config: { broadcast: { self: false } }
+            });
+
+            realtimeChannel
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'GPONTV' }, (payload) => {
+                    // Ignorar si hay una op propia en curso (evita eco)
+                    if (operationInProgress) return;
+
+                    if (payload.eventType === 'INSERT') {
+                        const row = payload.new;
+                        if (!channels.find(c => c.id === row.id)) {
+                            channels.push({ id: row.id, number: row.number, name: row.name, image: row.image, sound: row.sound });
+                            lastRenderedIds = '';
+                            renderChannels();
+                        }
+                    } else if (payload.eventType === 'UPDATE') {
+                        const row = payload.new;
+                        const ch = channels.find(c => c.id === row.id);
+                        if (ch) {
+                            ch.image = row.image;
+                            ch.sound = row.sound;
+                            ch.name  = row.name;
+                            renderChannels(); // update in-place, sin reconstruir
+                        }
+                    } else if (payload.eventType === 'DELETE') {
+                        channels = channels.filter(c => c.id !== payload.old.id);
+                        lastRenderedIds = '';
+                        renderChannels();
+                    }
+                })
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        setRealtimeStatus('connected');
+                        clearTimeout(realtimeRetryTimer);
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                        setRealtimeStatus('disconnected');
+                        // Reconexión automática tras 5 s
+                        realtimeRetryTimer = setTimeout(setupRealtime, 5000);
+                    }
+                });
+        }
+
         // ==================== INIT ====================
         window.onload = async () => {
             if (localStorage.getItem('theme') === 'light') {
@@ -491,18 +682,19 @@
             }
             const savedForm = localStorage.getItem('formVisible');
             formVisible = savedForm !== 'false';
-            const formContainer = document.getElementById('form-container');
-            const formIcon = document.getElementById('form-icon');
-            formContainer.style.display = formVisible ? 'block' : 'none';
-            formIcon.textContent = formVisible ? '▲' : '▼';
-            
+            document.getElementById('form-container').style.display = formVisible ? 'block' : 'none';
+            document.getElementById('form-icon').textContent = formVisible ? '▲' : '▼';
+
+            showLoading(true);
             await loadChannels();
+            showLoading(false);
+
             renderChannels();
-            
-            // Inicializar fecha y hora
+            setupRealtime();
+
             updateDateTime();
             setInterval(updateDateTime, 1000);
-            
+
             document.getElementById('channel-name').addEventListener('keypress', e => {
                 if (e.key === 'Enter') addChannel();
             });
