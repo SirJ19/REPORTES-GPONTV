@@ -207,7 +207,7 @@
             <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
         </label>
         <button onclick="deleteAllChannels()" class="text-xs px-4 py-1.5 hover:bg-red-500/10 hover:text-red-400 border border-zinc-800 rounded-2xl transition-colors">
-            🗑 Eliminar todo
+            🗑 Limpiar
         </button>
     </div>
 
@@ -613,7 +613,7 @@
             const label = document.getElementById('realtime-label');
             if (!dot || !label) return;
             const map = {
-                connected:    { cls: 'bg-green-500',  text: 'EN VIVO' },
+                connected:    { cls: 'bg-green-500',  text: 'Online' },
                 disconnected: { cls: 'bg-red-500',    text: 'SIN CONEXIÓN' },
                 reconnecting: { cls: 'bg-yellow-400', text: 'RECONECTANDO…' },
             };
