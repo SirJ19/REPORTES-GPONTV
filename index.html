@@ -260,17 +260,30 @@
         let searchQuery = '';
         let operationInProgress = false;
 
-        // ==================== TIMER DE AVERÍA ====================
-        // Mapa en memoria: id -> timestamp ISO cuando empezó la avería
+        // ==================== TIMER DE AVERÍA (localStorage) ====================
         const incidentStart = {};
+        const LS_KEY = 'gpontv_incident_starts';
 
-        // Formatea duración en segundos → solo días/horas/minutos, sin segundos
+        function lsGetAll() {
+            try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
+        }
+        function lsSaveAll(obj) {
+            localStorage.setItem(LS_KEY, JSON.stringify(obj));
+        }
+        function lsSetTimer(id, ts) {
+            const obj = lsGetAll(); obj[id] = ts; lsSaveAll(obj);
+        }
+        function lsClearTimer(id) {
+            const obj = lsGetAll(); delete obj[id]; lsSaveAll(obj);
+        }
+        function lsClearAllTimers() {
+            localStorage.removeItem(LS_KEY);
+        }
+
         function formatDuration(seconds) {
             const totalMinutes = Math.floor(seconds / 60);
             if (totalMinutes < 1) return `< 1m`;
-            if (seconds < 3600) {
-                return `${totalMinutes}m`;
-            }
+            if (seconds < 3600) return `${totalMinutes}m`;
             if (seconds < 86400) {
                 const h = Math.floor(seconds / 3600);
                 const m = Math.floor((seconds % 3600) / 60);
@@ -281,32 +294,34 @@
             return h > 0 ? `${d}d ${h}h` : `${d}d`;
         }
 
-        // Actualiza solo los textos del timer en los cards ya renderizados (sin reconstruir DOM)
         function tickTimers() {
             const now = Date.now();
             document.querySelectorAll('[data-timer-id]').forEach(el => {
                 const id = parseInt(el.dataset.timerId);
                 const start = incidentStart[id];
                 if (start) {
-                    const secs = (now - start) / 1000;
-                    el.textContent = formatDuration(secs);
+                    el.textContent = formatDuration((now - start) / 1000);
                 }
             });
         }
 
-        // Registra o limpia el inicio de avería según el estado actual del canal.
-        // SIEMPRE lee incident_since de DB para respetar el valor persistido.
+        // Fuente de verdad: localStorage del navegador.
+        // Al recargar, recupera el timestamp original -> el contador nunca se reinicia.
         function syncIncidentStart(ch) {
             if (hasProblem(ch)) {
-                // Prioridad: valor guardado en DB (persiste entre recargas)
-                if (ch.incident_since) {
-                    incidentStart[ch.id] = new Date(ch.incident_since).getTime();
-                } else if (!incidentStart[ch.id]) {
-                    // Solo si no hay nada guardado todavía (avería nueva, aún no persistida)
-                    incidentStart[ch.id] = Date.now();
+                const stored = lsGetAll();
+                if (stored[ch.id]) {
+                    // Ya habia un timestamp guardado -> usarlo tal cual
+                    incidentStart[ch.id] = stored[ch.id];
+                } else {
+                    // Averia nueva -> grabar ahora
+                    const now = Date.now();
+                    incidentStart[ch.id] = now;
+                    lsSetTimer(ch.id, now);
                 }
             } else {
                 delete incidentStart[ch.id];
+                lsClearTimer(ch.id);
             }
         }
 
@@ -400,9 +415,9 @@
                 channels.forEach(ch => {
                     ch.image = true;
                     ch.sound = true;
-                    ch.incident_since = null;
-                    delete incidentStart[ch.id];
                 });
+                lsClearAllTimers();
+                Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
                 renderChannels();
             });
         }
@@ -582,34 +597,18 @@
             const ch = channels.find(c => c.id === id);
             if (!ch) return;
             ch.image = value;
-            const wasProblem = hasProblem(ch);
-            // Calcular nuevo incident_since
-            const newIncidentSince = computeIncidentSince(ch);
-            ch.incident_since = newIncidentSince;
             syncIncidentStart(ch);
             renderChannels();
-            debouncedUpdate(id, { image: value, incident_since: newIncidentSince });
+            debouncedUpdate(id, { image: value });
         }
 
         function updateSound(id, value) {
             const ch = channels.find(c => c.id === id);
             if (!ch) return;
             ch.sound = value;
-            const newIncidentSince = computeIncidentSince(ch);
-            ch.incident_since = newIncidentSince;
             syncIncidentStart(ch);
             renderChannels();
-            debouncedUpdate(id, { sound: value, incident_since: newIncidentSince });
-        }
-
-        // Calcula el incident_since que debe guardarse:
-        // - Si hay avería y ya había un inicio previo → mantenerlo
-        // - Si hay avería nueva → ahora
-        // - Si no hay avería → null
-        function computeIncidentSince(ch) {
-            if (!hasProblem(ch)) return null;
-            if (incidentStart[ch.id]) return new Date(incidentStart[ch.id]).toISOString();
-            return new Date().toISOString();
+            debouncedUpdate(id, { sound: value });
         }
 
         // ==================== BUSCADOR ====================
