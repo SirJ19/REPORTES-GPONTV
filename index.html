@@ -63,6 +63,44 @@
         body.light .text-slate-400 { color: #64748b !important; }
         body.light .channel-card:hover { background-color: #f1f5f9 !important; }
 
+        /* Timer de avería */
+        .incident-timer {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.35);
+            border-radius: 9999px;
+            padding: 2px 10px;
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #fca5a5;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            animation: pulse-border 2s ease-in-out infinite;
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(239,68,68,0.35); }
+            50% { border-color: rgba(239,68,68,0.75); }
+        }
+        .incident-timer .dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: blink 1s step-start infinite;
+            flex-shrink: 0;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        body.light .incident-timer {
+            background: rgba(239,68,68,0.08);
+            color: #b91c1c;
+        }
+
         /* Loading overlay */
         #loading-overlay {
             position: fixed; inset: 0; background: rgba(0,0,0,0.6);
@@ -82,7 +120,6 @@
 </head>
 <body class="bg-black text-slate-200 min-h-screen font-sans">
 
-    <!-- Loading overlay -->
     <div id="loading-overlay">
         <div class="flex flex-col items-center gap-4">
             <div class="spinner"></div>
@@ -190,14 +227,11 @@
             <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
             <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
         </div>
-        <!-- Separador -->
         <div class="w-px h-4 bg-zinc-700"></div>
-        <!-- Indicador realtime -->
         <div class="flex items-center gap-1.5" title="Estado de sincronización en tiempo real">
             <div id="realtime-dot" class="w-2 h-2 rounded-full bg-yellow-400"></div>
             <span id="realtime-label" class="text-xs text-slate-500 font-mono tracking-wide">CONECTANDO…</span>
         </div>
-        <!-- Separador -->
         <div class="w-px h-4 bg-zinc-700"></div>
         <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
             Exportar CSV
@@ -224,12 +258,58 @@
         let formVisible = true;
         let isDarkMode = true;
         let searchQuery = '';
-
-        // ==================== MUTEX ====================
-        // Previene que operaciones pesadas corran en paralelo en la misma pestaña.
-        // Los toggles de imagen/audio quedan fuera del mutex para no bloquear la UI.
         let operationInProgress = false;
 
+        // ==================== TIMER DE AVERÍA ====================
+        // Mapa en memoria: id -> timestamp ISO cuando empezó la avería
+        const incidentStart = {};
+
+        // Formatea duración en segundos a "Xh Xm" o "Xd Xh" etc.
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${Math.floor(seconds)}s`;
+            if (seconds < 3600) {
+                const m = Math.floor(seconds / 60);
+                const s = Math.floor(seconds % 60);
+                return `${m}m ${s}s`;
+            }
+            if (seconds < 86400) {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                return `${h}h ${m}m`;
+            }
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            return `${d}d ${h}h`;
+        }
+
+        // Actualiza solo los textos del timer en los cards ya renderizados (sin reconstruir DOM)
+        function tickTimers() {
+            const now = Date.now();
+            document.querySelectorAll('[data-timer-id]').forEach(el => {
+                const id = parseInt(el.dataset.timerId);
+                const start = incidentStart[id];
+                if (start) {
+                    const secs = (now - start) / 1000;
+                    el.textContent = formatDuration(secs);
+                }
+            });
+        }
+
+        // Registra o limpia el inicio de avería según el estado actual del canal
+        function syncIncidentStart(ch) {
+            if (hasProblem(ch)) {
+                if (!incidentStart[ch.id]) {
+                    // Si viene de DB con incident_since, usarlo; si no, ahora
+                    incidentStart[ch.id] = ch.incident_since
+                        ? new Date(ch.incident_since).getTime()
+                        : Date.now();
+                }
+            } else {
+                delete incidentStart[ch.id];
+            }
+        }
+
+        // ==================== MUTEX ====================
         async function withLock(fn) {
             if (operationInProgress) return;
             operationInProgress = true;
@@ -242,14 +322,12 @@
             document.getElementById('loading-overlay').classList.toggle('hidden', !show);
         }
 
-        // ==================== DEBOUNCE para toggles ====================
-        // Evita saturar la DB si el usuario mueve el switch varias veces rápido.
-        const pendingUpdates = {}; // { [id]: { timer, fields } }
+        // ==================== DEBOUNCE ====================
+        const pendingUpdates = {};
 
         function debouncedUpdate(id, fields, delayMs = 400) {
             if (pendingUpdates[id]) {
                 clearTimeout(pendingUpdates[id].timer);
-                // Fusionar campos pendientes con los nuevos
                 Object.assign(pendingUpdates[id].fields, fields);
             } else {
                 pendingUpdates[id] = { fields: { ...fields } };
@@ -261,15 +339,13 @@
             }, delayMs);
         }
 
-        // ==================== SUPABASE: OPERACIONES GRANULARES ====================
-
+        // ==================== SUPABASE ====================
         async function loadChannels() {
             const { data, error } = await sb
                 .from('GPONTV').select('*').order('number', { ascending: true });
             if (error) { console.error('Load error:', error); return; }
 
             const allRows = data || [];
-            // Deduplicar por número: conservar el de menor id
             const seen = new Map();
             const toDelete = [];
             for (const row of allRows) {
@@ -278,18 +354,20 @@
                 else { seen.set(key, row); }
             }
             if (toDelete.length > 0) {
-                console.warn(`Limpiando ${toDelete.length} duplicado(s)`, toDelete);
                 await sb.from('GPONTV').delete().in('id', toDelete);
             }
             channels = Array.from(seen.values()).map(r => ({
-                id: r.id, number: r.number, name: r.name, image: r.image, sound: r.sound
+                id: r.id, number: r.number, name: r.name,
+                image: r.image, sound: r.sound,
+                incident_since: r.incident_since || null
             }));
+            channels.forEach(syncIncidentStart);
         }
 
         async function insertChannel(number, name) {
             const { data, error } = await sb
                 .from('GPONTV')
-                .insert([{ number, name, image: true, sound: true }])
+                .insert([{ number, name, image: true, sound: true, incident_since: null }])
                 .select().single();
             if (error) { console.error('Insert error:', error); alert('Error al guardar: ' + error.message); return null; }
             return data;
@@ -306,25 +384,29 @@
         }
 
         async function resetAllInDB() {
-            // Batch update en paralelo
+            const now = new Date().toISOString();
             await Promise.all(
-                channels.map(ch => sb.from('GPONTV').update({ image: true, sound: true }).eq('id', ch.id))
+                channels.map(ch => sb.from('GPONTV').update({ image: true, sound: true, incident_since: null }).eq('id', ch.id))
             );
         }
 
-        // ==================== REINICIAR ESTADOS ====================
+        // ==================== REINICIAR ====================
         async function resetAllStates() {
             if (channels.length === 0) return;
             if (!confirm("¿Reiniciar todos los estados?\nTodos pasarán a ESTABLE (Imagen y Audio: SÍ)")) return;
             await withLock(async () => {
                 await resetAllInDB();
-                channels.forEach(ch => { ch.image = true; ch.sound = true; });
+                channels.forEach(ch => {
+                    ch.image = true;
+                    ch.sound = true;
+                    ch.incident_since = null;
+                    delete incidentStart[ch.id];
+                });
                 renderChannels();
             });
         }
 
         // ==================== RENDER ====================
-        // Renderizado inteligente: actualiza solo counters/badges si los cards no cambiaron.
         let lastRenderedIds = '';
 
         function renderChannels() {
@@ -342,7 +424,6 @@
                 );
             }
 
-            // Actualizar contadores siempre
             const incidentCount = channels.filter(ch => hasProblem(ch)).length;
             document.getElementById('total-channels').textContent   = channels.length;
             document.getElementById('incidents-count').textContent  = incidentCount;
@@ -364,22 +445,28 @@
             }
             empty.classList.add('hidden');
 
-            // Fingerprint del estado actual para decidir si reconstruir o actualizar in-place
-            const fingerprint = displayed.map(ch => `${ch.id}:${ch.image}:${ch.sound}`).join('|');
             const idFingerprint = displayed.map(ch => ch.id).join('|');
 
             if (idFingerprint !== lastRenderedIds) {
-                // La lista de canales cambió (agregar/borrar) → reconstruir DOM completo
                 lastRenderedIds = idFingerprint;
                 container.innerHTML = '';
                 displayed.forEach(ch => container.appendChild(buildCard(ch)));
             } else {
-                // Solo estados cambiaron → actualizar in-place sin re-renderizar todo
                 displayed.forEach(ch => {
                     const existingCard = container.querySelector(`[data-id="${ch.id}"]`);
                     if (existingCard) updateCardInPlace(existingCard, ch);
                 });
             }
+        }
+
+        function buildTimerHTML(ch) {
+            if (!hasProblem(ch)) return '';
+            const start = incidentStart[ch.id];
+            const secs = start ? (Date.now() - start) / 1000 : 0;
+            return `<span class="incident-timer">
+                        <span class="dot"></span>
+                        <span data-timer-id="${ch.id}">${formatDuration(secs)}</span>
+                    </span>`;
         }
 
         function buildCard(channel) {
@@ -411,8 +498,11 @@
                             <span class="slider"></span>
                         </label>
                     </div>
-                    <div data-label="status" class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
-                        ${problem ? 'INCIDENCIA' : 'ESTABLE'}
+                    <div class="flex items-center gap-2">
+                        <div data-label="status" class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
+                            ${problem ? 'INCIDENCIA' : 'ESTABLE'}
+                        </div>
+                        <div data-label="timer-wrap">${buildTimerHTML(channel)}</div>
                     </div>
                     <button onclick="deleteChannel(${channel.id})" class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
                 </div>
@@ -422,30 +512,22 @@
 
         function updateCardInPlace(card, channel) {
             const problem = hasProblem(channel);
-            // Borde del card
             card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`;
-            // Label IMAGEN
             const imgLabel = card.querySelector('[data-label="image"]');
-            if (imgLabel) {
-                imgLabel.className = `status-text ${channel.image ? 'text-yes' : 'text-no'}`;
-                imgLabel.textContent = channel.image ? 'SÍ' : 'NO';
-            }
-            // Checkbox IMAGEN
+            if (imgLabel) { imgLabel.className = `status-text ${channel.image ? 'text-yes' : 'text-no'}`; imgLabel.textContent = channel.image ? 'SÍ' : 'NO'; }
             const checkboxes = card.querySelectorAll('input[type="checkbox"]');
             if (checkboxes[0]) checkboxes[0].checked = channel.image;
-            // Label AUDIO
             const sndLabel = card.querySelector('[data-label="sound"]');
-            if (sndLabel) {
-                sndLabel.className = `status-text ${channel.sound ? 'text-yes' : 'text-no'}`;
-                sndLabel.textContent = channel.sound ? 'SÍ' : 'NO';
-            }
+            if (sndLabel) { sndLabel.className = `status-text ${channel.sound ? 'text-yes' : 'text-no'}`; sndLabel.textContent = channel.sound ? 'SÍ' : 'NO'; }
             if (checkboxes[1]) checkboxes[1].checked = channel.sound;
-            // Badge ESTABLE / INCIDENCIA
             const badge = card.querySelector('[data-label="status"]');
             if (badge) {
                 badge.className = `${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center`;
                 badge.textContent = problem ? 'INCIDENCIA' : 'ESTABLE';
             }
+            // Actualizar el timer wrap (aparece/desaparece según estado)
+            const timerWrap = card.querySelector('[data-label="timer-wrap"]');
+            if (timerWrap) timerWrap.innerHTML = buildTimerHTML(channel);
         }
 
         // ==================== HELPERS ====================
@@ -469,17 +551,16 @@
                 if (!confirm(`Ya existe el canal ${number}. ¿Agregar de todas formas?`)) return;
             }
             await withLock(async () => {
-                // Doble check en DB (protección multipestaña)
                 const { data: existing } = await sb.from('GPONTV').select('id').eq('number', number);
                 if (existing && existing.length > 0) {
                     if (!confirm(`En la base de datos ya existe el canal ${number}. ¿Agregar de todas formas?`)) return;
                 }
                 const newCh = await insertChannel(number, name);
                 if (newCh) {
-                    channels.push({ id: newCh.id, number: newCh.number, name: newCh.name, image: newCh.image, sound: newCh.sound });
+                    channels.push({ id: newCh.id, number: newCh.number, name: newCh.name, image: newCh.image, sound: newCh.sound, incident_since: null });
                     document.getElementById('channel-number').value = '';
                     document.getElementById('channel-name').value = '';
-                    lastRenderedIds = ''; // forzar reconstrucción del DOM
+                    lastRenderedIds = '';
                     renderChannels();
                 }
             });
@@ -490,6 +571,7 @@
             await withLock(async () => {
                 await deleteChannelFromDB(id);
                 channels = channels.filter(ch => ch.id !== id);
+                delete incidentStart[id];
                 lastRenderedIds = '';
                 renderChannels();
             });
@@ -499,16 +581,34 @@
             const ch = channels.find(c => c.id === id);
             if (!ch) return;
             ch.image = value;
-            renderChannels(); // instantáneo en UI
-            debouncedUpdate(id, { image: value }); // persiste en DB con debounce
+            const wasProblem = hasProblem(ch);
+            // Calcular nuevo incident_since
+            const newIncidentSince = computeIncidentSince(ch);
+            ch.incident_since = newIncidentSince;
+            syncIncidentStart(ch);
+            renderChannels();
+            debouncedUpdate(id, { image: value, incident_since: newIncidentSince });
         }
 
         function updateSound(id, value) {
             const ch = channels.find(c => c.id === id);
             if (!ch) return;
             ch.sound = value;
+            const newIncidentSince = computeIncidentSince(ch);
+            ch.incident_since = newIncidentSince;
+            syncIncidentStart(ch);
             renderChannels();
-            debouncedUpdate(id, { sound: value });
+            debouncedUpdate(id, { sound: value, incident_since: newIncidentSince });
+        }
+
+        // Calcula el incident_since que debe guardarse:
+        // - Si hay avería y ya había un inicio previo → mantenerlo
+        // - Si hay avería nueva → ahora
+        // - Si no hay avería → null
+        function computeIncidentSince(ch) {
+            if (!hasProblem(ch)) return null;
+            if (incidentStart[ch.id]) return new Date(incidentStart[ch.id]).toISOString();
+            return new Date().toISOString();
         }
 
         // ==================== BUSCADOR ====================
@@ -550,6 +650,7 @@
             await withLock(async () => {
                 await sb.from('GPONTV').delete().gte('id', 0);
                 channels = [];
+                Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
                 lastRenderedIds = '';
                 filterOnlyIncidents = false;
                 searchQuery = '';
@@ -560,9 +661,11 @@
 
         function exportData() {
             if (channels.length === 0) return alert("No hay datos para exportar");
-            let csv = "Número,Nombre,Imagen,Audio,Estado\n";
+            let csv = "Número,Nombre,Imagen,Audio,Estado,Tiempo_Avería\n";
             channels.forEach(ch => {
-                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"}\n`;
+                const start = incidentStart[ch.id];
+                const tiempoAveria = start ? formatDuration((Date.now() - start) / 1000) : '';
+                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"},${tiempoAveria}\n`;
             });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -580,7 +683,7 @@
                 for (let i = 1; i < lines.length; i++) {
                     if (!lines[i].trim()) continue;
                     const [number, name, image, sound] = lines[i].split(',').map(s => s.trim());
-                    if (number && name) newChannels.push({ number, name, image: image === "SÍ", sound: sound === "SÍ" });
+                    if (number && name) newChannels.push({ number, name, image: image === "SÍ", sound: sound === "SÍ", incident_since: null });
                 }
                 if (newChannels.length === 0) { alert("No se encontraron canales válidos en el CSV"); return; }
                 if (channels.length > 0 && !confirm(`¿Reemplazar los ${channels.length} canales actuales con ${newChannels.length} del CSV?`)) return;
@@ -588,9 +691,12 @@
                 await withLock(async () => {
                     await sb.from('GPONTV').delete().gte('id', 0);
                     channels = [];
-                    // Insertar en batch
+                    Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
                     const { data } = await sb.from('GPONTV').insert(newChannels).select();
-                    if (data) channels = data.map(r => ({ id: r.id, number: r.number, name: r.name, image: r.image, sound: r.sound }));
+                    if (data) {
+                        channels = data.map(r => ({ id: r.id, number: r.number, name: r.name, image: r.image, sound: r.sound, incident_since: r.incident_since || null }));
+                        channels.forEach(syncIncidentStart);
+                    }
                     filterOnlyIncidents = false;
                     searchQuery = '';
                     document.getElementById('search-input').value = '';
@@ -608,7 +714,6 @@
         let realtimeRetryTimer = null;
 
         function setRealtimeStatus(status) {
-            // 'connected' | 'disconnected' | 'reconnecting'
             const dot = document.getElementById('realtime-dot');
             const label = document.getElementById('realtime-label');
             if (!dot || !label) return;
@@ -623,10 +728,7 @@
         }
 
         function setupRealtime() {
-            if (realtimeChannel) {
-                sb.removeChannel(realtimeChannel);
-                realtimeChannel = null;
-            }
+            if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
             clearTimeout(realtimeRetryTimer);
             setRealtimeStatus('reconnecting');
 
@@ -636,13 +738,14 @@
 
             realtimeChannel
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'GPONTV' }, (payload) => {
-                    // Ignorar si hay una op propia en curso (evita eco)
                     if (operationInProgress) return;
 
                     if (payload.eventType === 'INSERT') {
                         const row = payload.new;
                         if (!channels.find(c => c.id === row.id)) {
-                            channels.push({ id: row.id, number: row.number, name: row.name, image: row.image, sound: row.sound });
+                            const ch = { id: row.id, number: row.number, name: row.name, image: row.image, sound: row.sound, incident_since: row.incident_since || null };
+                            channels.push(ch);
+                            syncIncidentStart(ch);
                             lastRenderedIds = '';
                             renderChannels();
                         }
@@ -653,10 +756,14 @@
                             ch.image = row.image;
                             ch.sound = row.sound;
                             ch.name  = row.name;
-                            renderChannels(); // update in-place, sin reconstruir
+                            ch.incident_since = row.incident_since || null;
+                            syncIncidentStart(ch);
+                            renderChannels();
                         }
                     } else if (payload.eventType === 'DELETE') {
-                        channels = channels.filter(c => c.id !== payload.old.id);
+                        const id = payload.old.id;
+                        channels = channels.filter(c => c.id !== id);
+                        delete incidentStart[id];
                         lastRenderedIds = '';
                         renderChannels();
                     }
@@ -667,7 +774,6 @@
                         clearTimeout(realtimeRetryTimer);
                     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
                         setRealtimeStatus('disconnected');
-                        // Reconexión automática tras 5 s
                         realtimeRetryTimer = setTimeout(setupRealtime, 5000);
                     }
                 });
@@ -694,6 +800,9 @@
 
             updateDateTime();
             setInterval(updateDateTime, 1000);
+
+            // Tick de timers cada segundo (sin reconstruir DOM)
+            setInterval(tickTimers, 1000);
 
             document.getElementById('channel-name').addEventListener('keypress', e => {
                 if (e.key === 'Enter') addChannel();
