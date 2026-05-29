@@ -264,22 +264,21 @@
         // Mapa en memoria: id -> timestamp ISO cuando empezó la avería
         const incidentStart = {};
 
-        // Formatea duración en segundos a "Xh Xm" o "Xd Xh" etc.
+        // Formatea duración en segundos → solo días/horas/minutos, sin segundos
         function formatDuration(seconds) {
-            if (seconds < 60) return `${Math.floor(seconds)}s`;
+            const totalMinutes = Math.floor(seconds / 60);
+            if (totalMinutes < 1) return `< 1m`;
             if (seconds < 3600) {
-                const m = Math.floor(seconds / 60);
-                const s = Math.floor(seconds % 60);
-                return `${m}m ${s}s`;
+                return `${totalMinutes}m`;
             }
             if (seconds < 86400) {
                 const h = Math.floor(seconds / 3600);
                 const m = Math.floor((seconds % 3600) / 60);
-                return `${h}h ${m}m`;
+                return m > 0 ? `${h}h ${m}m` : `${h}h`;
             }
             const d = Math.floor(seconds / 86400);
             const h = Math.floor((seconds % 86400) / 3600);
-            return `${d}d ${h}h`;
+            return h > 0 ? `${d}d ${h}h` : `${d}d`;
         }
 
         // Actualiza solo los textos del timer en los cards ya renderizados (sin reconstruir DOM)
@@ -295,14 +294,16 @@
             });
         }
 
-        // Registra o limpia el inicio de avería según el estado actual del canal
+        // Registra o limpia el inicio de avería según el estado actual del canal.
+        // SIEMPRE lee incident_since de DB para respetar el valor persistido.
         function syncIncidentStart(ch) {
             if (hasProblem(ch)) {
-                if (!incidentStart[ch.id]) {
-                    // Si viene de DB con incident_since, usarlo; si no, ahora
-                    incidentStart[ch.id] = ch.incident_since
-                        ? new Date(ch.incident_since).getTime()
-                        : Date.now();
+                // Prioridad: valor guardado en DB (persiste entre recargas)
+                if (ch.incident_since) {
+                    incidentStart[ch.id] = new Date(ch.incident_since).getTime();
+                } else if (!incidentStart[ch.id]) {
+                    // Solo si no hay nada guardado todavía (avería nueva, aún no persistida)
+                    incidentStart[ch.id] = Date.now();
                 }
             } else {
                 delete incidentStart[ch.id];
