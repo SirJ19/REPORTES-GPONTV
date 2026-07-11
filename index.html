@@ -116,6 +116,31 @@
             animation: spin 0.7s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Botón limpiar búsqueda */
+        .search-clear-btn {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            line-height: 1;
+        }
+        .search-clear-btn:hover {
+            background-color: rgba(148,163,184,0.15);
+            color: #f97316;
+        }
+        .search-clear-btn.visible { display: flex; }
     </style>
 </head>
 <body class="bg-black text-slate-200 min-h-screen font-sans">
@@ -198,8 +223,16 @@
                         type="text"
                         placeholder="Buscar canal..."
                         oninput="updateSearch(this.value)"
-                        class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-5 py-3 text-base outline-none"
+                        class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-9 py-3 text-base outline-none"
                     >
+                    <button
+                        id="search-clear-btn"
+                        type="button"
+                        class="search-clear-btn"
+                        onclick="clearSearch()"
+                        aria-label="Limpiar búsqueda"
+                        title="Limpiar búsqueda"
+                    >✕</button>
                 </div>
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
@@ -614,6 +647,17 @@
         // ==================== BUSCADOR ====================
         function updateSearch(value) {
             searchQuery = value.toLowerCase().trim();
+            const clearBtn = document.getElementById('search-clear-btn');
+            if (clearBtn) clearBtn.classList.toggle('visible', value.length > 0);
+            renderChannels();
+        }
+
+        function clearSearch() {
+            const input = document.getElementById('search-input');
+            input.value = '';
+            searchQuery = '';
+            document.getElementById('search-clear-btn').classList.remove('visible');
+            input.focus();
             renderChannels();
         }
 
