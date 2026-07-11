@@ -176,11 +176,18 @@
                         <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
                     </div>
                 </div>
-                <button onclick="toggleForm()" id="toggle-form-btn"
-                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
-                    <span id="form-icon">▲</span>
-                    <span id="form-text">Panel</span>
-                </button>
+                <div class="flex flex-col items-stretch gap-1.5">
+                    <button onclick="toggleForm()" id="toggle-form-btn"
+                            class="flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
+                        <span id="form-icon">▲</span>
+                        <span id="form-text">Panel</span>
+                    </button>
+                    <button onclick="copyIncidentReport()" id="copy-report-btn"
+                            class="flex items-center justify-center gap-1.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-2xl text-xs font-medium text-slate-400">
+                        <span id="copy-btn-icon">📋</span>
+                        <span id="copy-btn-text">COPIAR</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -245,6 +252,7 @@
                 </button>
             </div>
         </div>
+
 
         <div id="channels-list" class="space-y-2"></div>
         <div id="empty-state" class="hidden text-center py-16">
@@ -452,6 +460,58 @@
                 lsClearAllTimers();
                 Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
                 renderChannels();
+            });
+        }
+
+        // ==================== COPIAR REPORTE ====================
+        function copyIncidentReport() {
+            const problemChannels = channels.filter(ch => hasProblem(ch));
+            if (problemChannels.length === 0) {
+                alert('No hay incidencias activas para reportar.');
+                return;
+            }
+
+            const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' }));
+            const pad = n => n.toString().padStart(2, '0');
+            const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+            let lines = [];
+            lines.push('🚨 REPORTE DE CANALES CON INCIDENCIAS 🚨');
+            lines.push('LIMA / CUSCO / ICA');
+            lines.push(`Incidencias detectadas: ${problemChannels.length}`);
+            lines.push('');
+            problemChannels.forEach(ch => {
+                let issues = [];
+                if (!ch.image) issues.push('Sin Imagen');
+                if (!ch.sound) issues.push('Sin Audio');
+                lines.push(`CANAL ${ch.number} \u2013 ${ch.name.toUpperCase()} (${issues.join(', ')})`);
+            });
+
+            const report = lines.join('\n');
+
+            navigator.clipboard.writeText(report).then(() => {
+                const btn = document.getElementById('copy-report-btn');
+                const icon = document.getElementById('copy-btn-icon');
+                const text = document.getElementById('copy-btn-text');
+                icon.textContent = '✅';
+                text.textContent = 'COPIADO';
+                btn.classList.add('border-green-500', 'text-green-400');
+                setTimeout(() => {
+                    icon.textContent = '📋';
+                    text.textContent = 'COPIAR';
+                    btn.classList.remove('border-green-500', 'text-green-400');
+                }, 1500);
+            }).catch(() => {
+                // Fallback for older browsers
+                const ta = document.createElement('textarea');
+                ta.value = report;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                alert('Reporte copiado al portapapeles');
             });
         }
 
@@ -838,6 +898,14 @@
             showLoading(true);
             await loadChannels();
             showLoading(false);
+
+            // Iniciar con filtro de incidencias activo
+            filterOnlyIncidents = true;
+            document.getElementById('filter-icon').textContent = '📋';
+            document.getElementById('filter-text').textContent = 'FILTRAR TODOS';
+            const filterBtn = document.getElementById('filter-button');
+            filterBtn.classList.add('bg-orange-500', 'text-white');
+            lastRenderedIds = '';
 
             renderChannels();
             setupRealtime();
