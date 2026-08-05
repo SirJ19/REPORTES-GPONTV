@@ -287,639 +287,2192 @@
     </div>
 
     <script>
-        // ==================== SUPABASE CONFIG ====================
-        const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co';
-        const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf';
-        const sb = window.supabase.createClient(supabaseUrl, supabaseKey, {
-            realtime: { params: { eventsPerSecond: 20 } }
+    // ==================== SUPABASE CONFIG ====================
+    const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co';
+    const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf';
+
+    const sb = window.supabase.createClient(supabaseUrl, supabaseKey, {
+        realtime: {
+            params: {
+                eventsPerSecond: 20
+            }
+        }
+    });
+
+    let channels = [];
+    let filterOnlyIncidents = false;
+    let formVisible = true;
+    let isDarkMode = true;
+    let searchQuery = '';
+    let operationInProgress = false;
+    let lastRenderedIds = '';
+
+    // ==================== TIMER DE AVERÍA ====================
+    const incidentStart = {};
+    const LS_KEY = 'gpontv_incident_starts';
+
+    function lsGetAll() {
+        try {
+            return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+        } catch (error) {
+            console.warn('No se pudo leer el temporizador local:', error);
+            return {};
+        }
+    }
+
+    function lsSaveAll(obj) {
+        try {
+            localStorage.setItem(LS_KEY, JSON.stringify(obj));
+        } catch (error) {
+            console.warn('No se pudo guardar el temporizador local:', error);
+        }
+    }
+
+    function lsSetTimer(id, timestamp) {
+        const obj = lsGetAll();
+        obj[String(id)] = timestamp;
+        lsSaveAll(obj);
+    }
+
+    function lsClearTimer(id) {
+        const obj = lsGetAll();
+        delete obj[String(id)];
+        lsSaveAll(obj);
+    }
+
+    function lsClearAllTimers() {
+        localStorage.removeItem(LS_KEY);
+    }
+
+    function formatDuration(seconds) {
+        const safeSeconds = Math.max(0, Number(seconds) || 0);
+        const totalMinutes = Math.floor(safeSeconds / 60);
+
+        if (totalMinutes < 1) return '< 1m';
+
+        if (safeSeconds < 3600) {
+            return `${totalMinutes}m`;
+        }
+
+        if (safeSeconds < 86400) {
+            const hours = Math.floor(safeSeconds / 3600);
+            const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+            return minutes > 0
+                ? `${hours}h ${minutes}m`
+                : `${hours}h`;
+        }
+
+        const days = Math.floor(safeSeconds / 86400);
+        const hours = Math.floor((safeSeconds % 86400) / 3600);
+
+        return hours > 0
+            ? `${days}d ${hours}h`
+            : `${days}d`;
+    }
+
+    function tickTimers() {
+        const now = Date.now();
+
+        document.querySelectorAll('[data-timer-id]').forEach(element => {
+            const id = String(element.dataset.timerId);
+            const start = incidentStart[id];
+
+            if (start) {
+                element.textContent = formatDuration(
+                    (now - start) / 1000
+                );
+            }
+        });
+    }
+
+    function syncIncidentStart(channel) {
+        const id = String(channel.id);
+
+        if (hasProblem(channel)) {
+            const stored = lsGetAll();
+
+            if (stored[id]) {
+                incidentStart[id] = Number(stored[id]);
+            } else {
+                const now = Date.now();
+
+                incidentStart[id] = now;
+                lsSetTimer(id, now);
+            }
+        } else {
+            delete incidentStart[id];
+            lsClearTimer(id);
+        }
+    }
+
+    // ==================== ESTADO DE CARGA ====================
+    function showLoading(show) {
+        const overlay = document.getElementById('loading-overlay');
+
+        if (overlay) {
+            overlay.classList.toggle('hidden', !show);
+        }
+    }
+
+    async function withLock(fn) {
+        if (operationInProgress) return;
+
+        operationInProgress = true;
+        showLoading(true);
+
+        try {
+            return await fn();
+        } catch (error) {
+            console.error('Error inesperado:', error);
+
+            alert(
+                `Ocurrió un error inesperado:\n` +
+                `${error.message || error}`
+            );
+
+            return null;
+        } finally {
+            operationInProgress = false;
+            showLoading(false);
+        }
+    }
+
+    // ==================== ACTUALIZACIONES DIFERIDAS ====================
+    const pendingUpdates = {};
+
+    function debouncedUpdate(id, fields, delayMs = 400) {
+        const key = String(id);
+
+        if (pendingUpdates[key]) {
+            clearTimeout(pendingUpdates[key].timer);
+            Object.assign(pendingUpdates[key].fields, fields);
+        } else {
+            pendingUpdates[key] = {
+                fields: { ...fields },
+                timer: null
+            };
+        }
+
+        pendingUpdates[key].timer = setTimeout(async () => {
+            const updateFields = pendingUpdates[key].fields;
+
+            delete pendingUpdates[key];
+
+            const success = await updateChannelInDB(
+                id,
+                updateFields
+            );
+
+            if (!success) {
+                await loadChannels();
+
+                lastRenderedIds = '';
+                renderChannels();
+
+                alert(
+                    'No se pudo guardar el cambio. ' +
+                    'Se restauró el estado de la base de datos.'
+                );
+            }
+        }, delayMs);
+    }
+
+    // ==================== SUPABASE ====================
+    async function loadChannels() {
+        const { data, error } = await sb
+            .from('GPONTV')
+            .select('id, number, name, image, sound')
+            .order('number', {
+                ascending: true
+            });
+
+        if (error) {
+            console.error('Load error:', error);
+
+            alert(
+                `No se pudieron cargar los canales:\n` +
+                `${error.message}`
+            );
+
+            channels = [];
+            return false;
+        }
+
+        channels = (data || []).map(row => ({
+            id: row.id,
+            number: row.number,
+            name: row.name,
+            image: row.image !== false,
+            sound: row.sound !== false
+        }));
+
+        channels.forEach(syncIncidentStart);
+
+        return true;
+    }
+
+    async function insertChannel(number, name) {
+        const payload = {
+            number: String(number).trim(),
+            name: String(name).trim(),
+            image: true,
+            sound: true
+        };
+
+        /*
+         * No se envía incident_since.
+         * Así el registro funciona aunque esa columna no exista.
+         */
+        const { data, error } = await sb
+            .from('GPONTV')
+            .insert([payload])
+            .select('id, number, name, image, sound')
+            .single();
+
+        if (error) {
+            console.error('Insert error:', error);
+
+            let message = error.message;
+
+            if (error.code === '23505') {
+                message =
+                    `Ya existe un canal con el número ` +
+                    `${payload.number}.`;
+            } else if (error.code === '42501') {
+                message =
+                    'Supabase bloqueó el registro por las ' +
+                    'políticas RLS de la tabla GPONTV.';
+            }
+
+            alert(
+                `No se pudo agregar el canal:\n${message}`
+            );
+
+            return null;
+        }
+
+        return data;
+    }
+
+    async function updateChannelInDB(id, fields) {
+        const { error } = await sb
+            .from('GPONTV')
+            .update(fields)
+            .eq('id', id);
+
+        if (error) {
+            console.error('Update error:', error);
+            return false;
+        }
+
+        return true;
+    }
+
+    async function deleteChannelFromDB(id) {
+        const { error } = await sb
+            .from('GPONTV')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            console.error('Delete error:', error);
+
+            alert(
+                `No se pudo eliminar el canal:\n` +
+                `${error.message}`
+            );
+
+            return false;
+        }
+
+        return true;
+    }
+
+    async function resetAllInDB() {
+        if (channels.length === 0) return true;
+
+        const ids = channels.map(channel => channel.id);
+
+        const { error } = await sb
+            .from('GPONTV')
+            .update({
+                image: true,
+                sound: true
+            })
+            .in('id', ids);
+
+        if (error) {
+            console.error('Reset error:', error);
+
+            alert(
+                `No se pudieron reiniciar los canales:\n` +
+                `${error.message}`
+            );
+
+            return false;
+        }
+
+        return true;
+    }
+
+    // ==================== REINICIAR ESTADOS ====================
+    async function resetAllStates() {
+        if (channels.length === 0) {
+            alert('No hay canales para reiniciar.');
+            return;
+        }
+
+        const accepted = confirm(
+            '¿Reiniciar todos los estados?\n' +
+            'Todos pasarán a ESTABLE ' +
+            '(Imagen y Audio: SÍ)'
+        );
+
+        if (!accepted) return;
+
+        await withLock(async () => {
+            const success = await resetAllInDB();
+
+            if (!success) return;
+
+            channels.forEach(channel => {
+                channel.image = true;
+                channel.sound = true;
+            });
+
+            lsClearAllTimers();
+
+            Object.keys(incidentStart).forEach(key => {
+                delete incidentStart[key];
+            });
+
+            lastRenderedIds = '';
+            renderChannels();
+        });
+    }
+
+    // ==================== COPIAR REPORTE ====================
+    function copyIncidentReport() {
+        const problemChannels = channels.filter(
+            channel => hasProblem(channel)
+        );
+
+        if (problemChannels.length === 0) {
+            alert(
+                'No hay incidencias activas para reportar.'
+            );
+
+            return;
+        }
+
+        const now = new Date(
+            new Date().toLocaleString('en-US', {
+                timeZone: 'America/Lima'
+            })
+        );
+
+        const pad = value => {
+            return String(value).padStart(2, '0');
+        };
+
+        const dateStr =
+            `${pad(now.getDate())}/` +
+            `${pad(now.getMonth() + 1)}/` +
+            `${now.getFullYear()} ` +
+            `${pad(now.getHours())}:` +
+            `${pad(now.getMinutes())}`;
+
+        const lines = [
+            '🚨 REPORTE DE CANALES CON INCIDENCIAS 🚨',
+            'LIMA / CUSCO / ICA',
+            `Fecha: ${dateStr}`,
+            `Incidencias detectadas: ${problemChannels.length}`,
+            ''
+        ];
+
+        problemChannels.forEach(channel => {
+            const issues = [];
+
+            if (!channel.image) {
+                issues.push('Sin Imagen');
+            }
+
+            if (!channel.sound) {
+                issues.push('Sin Audio');
+            }
+
+            const start =
+                incidentStart[String(channel.id)];
+
+            const duration = start
+                ? ` - ${formatDuration(
+                    (Date.now() - start) / 1000
+                )}`
+                : '';
+
+            lines.push(
+                `CANAL ${channel.number} – ` +
+                `${String(channel.name).toUpperCase()} ` +
+                `(${issues.join(', ')})${duration}`
+            );
         });
 
-        let channels = [];
-        let filterOnlyIncidents = false;
-        let formVisible = true;
-        let isDarkMode = true;
-        let searchQuery = '';
-        let operationInProgress = false;
+        const report = lines.join('\n');
 
-        // ==================== TIMER DE AVERÍA (localStorage) ====================
-        const incidentStart = {};
-        const LS_KEY = 'gpontv_incident_starts';
+        const markAsCopied = () => {
+            const button =
+                document.getElementById('copy-report-btn');
 
-        function lsGetAll() {
-            try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
-        }
-        function lsSaveAll(obj) {
-            localStorage.setItem(LS_KEY, JSON.stringify(obj));
-        }
-        function lsSetTimer(id, ts) {
-            const obj = lsGetAll(); obj[id] = ts; lsSaveAll(obj);
-        }
-        function lsClearTimer(id) {
-            const obj = lsGetAll(); delete obj[id]; lsSaveAll(obj);
-        }
-        function lsClearAllTimers() {
-            localStorage.removeItem(LS_KEY);
-        }
+            const icon =
+                document.getElementById('copy-btn-icon');
 
-        function formatDuration(seconds) {
-            const totalMinutes = Math.floor(seconds / 60);
-            if (totalMinutes < 1) return `< 1m`;
-            if (seconds < 3600) return `${totalMinutes}m`;
-            if (seconds < 86400) {
-                const h = Math.floor(seconds / 3600);
-                const m = Math.floor((seconds % 3600) / 60);
-                return m > 0 ? `${h}h ${m}m` : `${h}h`;
-            }
-            const d = Math.floor(seconds / 86400);
-            const h = Math.floor((seconds % 86400) / 3600);
-            return h > 0 ? `${d}d ${h}h` : `${d}d`;
-        }
+            const text =
+                document.getElementById('copy-btn-text');
 
-        function tickTimers() {
-            const now = Date.now();
-            document.querySelectorAll('[data-timer-id]').forEach(el => {
-                const id = parseInt(el.dataset.timerId);
-                const start = incidentStart[id];
-                if (start) {
-                    el.textContent = formatDuration((now - start) / 1000);
-                }
-            });
-        }
-
-        // Fuente de verdad: localStorage del navegador.
-        // Al recargar, recupera el timestamp original -> el contador nunca se reinicia.
-        function syncIncidentStart(ch) {
-            if (hasProblem(ch)) {
-                const stored = lsGetAll();
-                if (stored[ch.id]) {
-                    // Ya habia un timestamp guardado -> usarlo tal cual
-                    incidentStart[ch.id] = stored[ch.id];
-                } else {
-                    // Averia nueva -> grabar ahora
-                    const now = Date.now();
-                    incidentStart[ch.id] = now;
-                    lsSetTimer(ch.id, now);
-                }
-            } else {
-                delete incidentStart[ch.id];
-                lsClearTimer(ch.id);
-            }
-        }
-
-        // ==================== MUTEX ====================
-        async function withLock(fn) {
-            if (operationInProgress) return;
-            operationInProgress = true;
-            showLoading(true);
-            try { await fn(); }
-            finally { operationInProgress = false; showLoading(false); }
-        }
-
-        function showLoading(show) {
-            document.getElementById('loading-overlay').classList.toggle('hidden', !show);
-        }
-
-        // ==================== DEBOUNCE ====================
-        const pendingUpdates = {};
-
-        function debouncedUpdate(id, fields, delayMs = 400) {
-            if (pendingUpdates[id]) {
-                clearTimeout(pendingUpdates[id].timer);
-                Object.assign(pendingUpdates[id].fields, fields);
-            } else {
-                pendingUpdates[id] = { fields: { ...fields } };
-            }
-            pendingUpdates[id].timer = setTimeout(async () => {
-                const f = pendingUpdates[id].fields;
-                delete pendingUpdates[id];
-                await updateChannelInDB(id, f);
-            }, delayMs);
-        }
-
-        // ==================== SUPABASE ====================
-        async function loadChannels() {
-            const { data, error } = await sb
-                .from('GPONTV').select('*').order('number', { ascending: true });
-            if (error) { console.error('Load error:', error); return; }
-
-            const allRows = data || [];
-            const seen = new Map();
-            const toDelete = [];
-            for (const row of allRows) {
-                const key = String(row.number).trim();
-                if (seen.has(key)) { toDelete.push(row.id); }
-                else { seen.set(key, row); }
-            }
-            if (toDelete.length > 0) {
-                await sb.from('GPONTV').delete().in('id', toDelete);
-            }
-            channels = Array.from(seen.values()).map(r => ({
-                id: r.id, number: r.number, name: r.name,
-                image: r.image, sound: r.sound,
-                incident_since: r.incident_since || null
-            }));
-            channels.forEach(syncIncidentStart);
-        }
-
-        async function insertChannel(number, name) {
-            const { data, error } = await sb
-                .from('GPONTV')
-                .insert([{ number, name, image: true, sound: true, incident_since: null }])
-                .select().single();
-            if (error) { console.error('Insert error:', error); alert('Error al guardar: ' + error.message); return null; }
-            return data;
-        }
-
-        async function updateChannelInDB(id, fields) {
-            const { error } = await sb.from('GPONTV').update(fields).eq('id', id);
-            if (error) console.error('Update error:', error);
-        }
-
-        async function deleteChannelFromDB(id) {
-            const { error } = await sb.from('GPONTV').delete().eq('id', id);
-            if (error) { console.error('Delete error:', error); alert('Error al eliminar: ' + error.message); }
-        }
-
-        async function resetAllInDB() {
-            const now = new Date().toISOString();
-            await Promise.all(
-                channels.map(ch => sb.from('GPONTV').update({ image: true, sound: true, incident_since: null }).eq('id', ch.id))
-            );
-        }
-
-        // ==================== REINICIAR ====================
-        async function resetAllStates() {
-            if (channels.length === 0) return;
-            if (!confirm("¿Reiniciar todos los estados?\nTodos pasarán a ESTABLE (Imagen y Audio: SÍ)")) return;
-            await withLock(async () => {
-                await resetAllInDB();
-                channels.forEach(ch => {
-                    ch.image = true;
-                    ch.sound = true;
-                });
-                lsClearAllTimers();
-                Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
-                renderChannels();
-            });
-        }
-
-        // ==================== COPIAR REPORTE ====================
-        function copyIncidentReport() {
-            const problemChannels = channels.filter(ch => hasProblem(ch));
-            if (problemChannels.length === 0) {
-                alert('No hay incidencias activas para reportar.');
-                return;
-            }
-
-            const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' }));
-            const pad = n => n.toString().padStart(2, '0');
-            const dateStr = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
-            let lines = [];
-            lines.push('🚨 REPORTE DE CANALES CON INCIDENCIAS 🚨');
-            lines.push('LIMA / CUSCO / ICA');
-            lines.push(`Incidencias detectadas: ${problemChannels.length}`);
-            lines.push('');
-            problemChannels.forEach(ch => {
-                let issues = [];
-                if (!ch.image) issues.push('Sin Imagen');
-                if (!ch.sound) issues.push('Sin Audio');
-                lines.push(`CANAL ${ch.number} \u2013 ${ch.name.toUpperCase()} (${issues.join(', ')})`);
-            });
-
-            const report = lines.join('\n');
-
-            navigator.clipboard.writeText(report).then(() => {
-                const btn = document.getElementById('copy-report-btn');
-                const icon = document.getElementById('copy-btn-icon');
-                const text = document.getElementById('copy-btn-text');
+            if (icon) {
                 icon.textContent = '✅';
+            }
+
+            if (text) {
                 text.textContent = 'COPIADO';
-                btn.classList.add('border-green-500', 'text-green-400');
-                setTimeout(() => {
-                    icon.textContent = '📋';
-                    text.textContent = 'COPIAR';
-                    btn.classList.remove('border-green-500', 'text-green-400');
-                }, 1500);
-            }).catch(() => {
-                // Fallback for older browsers
-                const ta = document.createElement('textarea');
-                ta.value = report;
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                alert('Reporte copiado al portapapeles');
-            });
-        }
+            }
 
-        // ==================== RENDER ====================
-        let lastRenderedIds = '';
-
-        function renderChannels() {
-            sortChannels();
-            const container = document.getElementById('channels-list');
-            const empty    = document.getElementById('empty-state');
-
-            let displayed = filterOnlyIncidents
-                ? channels.filter(ch => hasProblem(ch))
-                : [...channels];
-            if (searchQuery) {
-                displayed = displayed.filter(ch =>
-                    ch.number.toString().includes(searchQuery) ||
-                    ch.name.toLowerCase().includes(searchQuery)
+            if (button) {
+                button.classList.add(
+                    'border-green-500',
+                    'text-green-400'
                 );
             }
 
-            const incidentCount = channels.filter(ch => hasProblem(ch)).length;
-            document.getElementById('total-channels').textContent   = channels.length;
-            document.getElementById('incidents-count').textContent  = incidentCount;
-            document.getElementById('footer-text').textContent      = `${incidentCount} incidencias`;
-            document.getElementById('footer-dot').className = incidentCount > 0
-                ? "w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"
-                : "w-3.5 h-3.5 bg-orange-500 rounded-full";
-            document.getElementById('view-title').textContent = filterOnlyIncidents
-                ? `Canales con incidencias (${displayed.length})`
-                : `Todos los canales (${channels.length})`;
+            setTimeout(() => {
+                if (icon) {
+                    icon.textContent = '📋';
+                }
 
-            if (displayed.length === 0) {
-                container.innerHTML = '';
-                empty.classList.remove('hidden');
-                document.getElementById('empty-title').textContent    = searchQuery ? "No se encontraron canales" : filterOnlyIncidents ? "Sin incidencias activas" : "No hay canales aún";
-                document.getElementById('empty-subtitle').textContent = searchQuery ? "Prueba con otro número o nombre" : filterOnlyIncidents ? "Todos los canales están estables ✔" : "Agrega canales usando el formulario superior";
-                lastRenderedIds = '';
+                if (text) {
+                    text.textContent = 'COPIAR';
+                }
+
+                if (button) {
+                    button.classList.remove(
+                        'border-green-500',
+                        'text-green-400'
+                    );
+                }
+            }, 1500);
+        };
+
+        if (
+            navigator.clipboard &&
+            window.isSecureContext
+        ) {
+            navigator.clipboard
+                .writeText(report)
+                .then(markAsCopied)
+                .catch(() => {
+                    fallbackCopy(
+                        report,
+                        markAsCopied
+                    );
+                });
+        } else {
+            fallbackCopy(
+                report,
+                markAsCopied
+            );
+        }
+    }
+
+    function fallbackCopy(text, onSuccess) {
+        const textarea =
+            document.createElement('textarea');
+
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        textarea.style.pointerEvents = 'none';
+
+        document.body.appendChild(textarea);
+
+        textarea.focus();
+        textarea.select();
+
+        try {
+            document.execCommand('copy');
+
+            if (typeof onSuccess === 'function') {
+                onSuccess();
+            }
+        } catch (error) {
+            console.error('Copy error:', error);
+
+            alert(
+                'No se pudo copiar el reporte automáticamente.'
+            );
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    }
+
+    // ==================== RENDER ====================
+    function renderChannels() {
+        sortChannels();
+
+        const container =
+            document.getElementById('channels-list');
+
+        const empty =
+            document.getElementById('empty-state');
+
+        if (!container || !empty) return;
+
+        let displayed = filterOnlyIncidents
+            ? channels.filter(
+                channel => hasProblem(channel)
+            )
+            : [...channels];
+
+        if (searchQuery) {
+            displayed = displayed.filter(channel => {
+                const number =
+                    String(channel.number).toLowerCase();
+
+                const name =
+                    String(channel.name).toLowerCase();
+
+                return (
+                    number.includes(searchQuery) ||
+                    name.includes(searchQuery)
+                );
+            });
+        }
+
+        const incidentCount = channels.filter(
+            channel => hasProblem(channel)
+        ).length;
+
+        setText(
+            'total-channels',
+            channels.length
+        );
+
+        setText(
+            'incidents-count',
+            incidentCount
+        );
+
+        setText(
+            'footer-text',
+            `${incidentCount} incidencias`
+        );
+
+        const footerDot =
+            document.getElementById('footer-dot');
+
+        if (footerDot) {
+            footerDot.className =
+                incidentCount > 0
+                    ? (
+                        'w-3.5 h-3.5 bg-red-500 ' +
+                        'rounded-full animate-pulse'
+                    )
+                    : (
+                        'w-3.5 h-3.5 bg-orange-500 ' +
+                        'rounded-full'
+                    );
+        }
+
+        setText(
+            'view-title',
+            filterOnlyIncidents
+                ? (
+                    `Canales con incidencias ` +
+                    `(${displayed.length})`
+                )
+                : (
+                    `Todos los canales ` +
+                    `(${channels.length})`
+                )
+        );
+
+        if (displayed.length === 0) {
+            container.innerHTML = '';
+            empty.classList.remove('hidden');
+
+            setText(
+                'empty-title',
+                searchQuery
+                    ? 'No se encontraron canales'
+                    : filterOnlyIncidents
+                        ? 'Sin incidencias activas'
+                        : 'No hay canales aún'
+            );
+
+            setText(
+                'empty-subtitle',
+                searchQuery
+                    ? 'Prueba con otro número o nombre'
+                    : filterOnlyIncidents
+                        ? (
+                            'Todos los canales ' +
+                            'están estables ✔'
+                        )
+                        : (
+                            'Agrega canales usando ' +
+                            'el formulario superior'
+                        )
+            );
+
+            lastRenderedIds = '';
+            return;
+        }
+
+        empty.classList.add('hidden');
+
+        const idFingerprint = displayed
+            .map(channel => {
+                return (
+                    `${channel.id}:` +
+                    `${channel.number}:` +
+                    `${channel.name}`
+                );
+            })
+            .join('|');
+
+        if (idFingerprint !== lastRenderedIds) {
+            lastRenderedIds = idFingerprint;
+            container.innerHTML = '';
+
+            displayed.forEach(channel => {
+                container.appendChild(
+                    buildCard(channel)
+                );
+            });
+        } else {
+            displayed.forEach(channel => {
+                const existingCard = findCardById(
+                    container,
+                    channel.id
+                );
+
+                if (existingCard) {
+                    updateCardInPlace(
+                        existingCard,
+                        channel
+                    );
+                }
+            });
+        }
+    }
+
+    function setText(id, value) {
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+            element.textContent = String(value);
+        }
+    }
+
+    function findCardById(container, id) {
+        return Array
+            .from(container.children)
+            .find(child => {
+                return (
+                    String(child.dataset.id) ===
+                    String(id)
+                );
+            });
+    }
+
+    function buildTimerHTML(channel) {
+        if (!hasProblem(channel)) return '';
+
+        const id = String(channel.id);
+        const start = incidentStart[id];
+
+        const seconds = start
+            ? (Date.now() - start) / 1000
+            : 0;
+
+        return `
+            <span class="incident-timer">
+                <span class="dot"></span>
+
+                <span data-timer-id="${escapeHTML(id)}">
+                    ${formatDuration(seconds)}
+                </span>
+            </span>
+        `;
+    }
+
+    function buildCard(channel) {
+        const problem = hasProblem(channel);
+
+        /*
+         * JSON.stringify permite utilizar IDs numéricos
+         * o UUID sin romper los eventos onclick.
+         */
+        const idArgument =
+            JSON.stringify(channel.id);
+
+        const card =
+            document.createElement('div');
+
+        card.dataset.id =
+            String(channel.id);
+
+        card.className =
+            `channel-card flex items-center ` +
+            `justify-between bg-black border ` +
+            `${problem
+                ? 'border-red-500'
+                : 'border-zinc-800'
+            } rounded-3xl px-6 py-4`;
+
+        card.innerHTML = `
+            <div class="flex items-center gap-6">
+                <div class="w-14 text-center">
+                    <div
+                        class="text-3xl font-mono font-bold text-orange-400"
+                    >
+                        ${escapeHTML(channel.number)}
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xl font-semibold">
+                        ${escapeHTML(channel.name)}
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-8">
+                <div class="flex items-center gap-3">
+                    <span
+                        class="text-white font-medium w-14 text-sm"
+                    >
+                        IMAGEN
+                    </span>
+
+                    <span
+                        data-label="image"
+                        class="status-text ${
+                            channel.image
+                                ? 'text-yes'
+                                : 'text-no'
+                        }"
+                    >
+                        ${channel.image ? 'SÍ' : 'NO'}
+                    </span>
+
+                    <label class="switch">
+                        <input
+                            type="checkbox"
+                            ${channel.image ? 'checked' : ''}
+                            onchange='updateImage(
+                                ${idArgument},
+                                this.checked
+                            )'
+                        >
+
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <span
+                        class="text-white font-medium w-14 text-sm"
+                    >
+                        AUDIO
+                    </span>
+
+                    <span
+                        data-label="sound"
+                        class="status-text ${
+                            channel.sound
+                                ? 'text-yes'
+                                : 'text-no'
+                        }"
+                    >
+                        ${channel.sound ? 'SÍ' : 'NO'}
+                    </span>
+
+                    <label class="switch">
+                        <input
+                            type="checkbox"
+                            ${channel.sound ? 'checked' : ''}
+                            onchange='updateSound(
+                                ${idArgument},
+                                this.checked
+                            )'
+                        >
+
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <div
+                        data-label="status"
+                        class="${
+                            problem
+                                ? 'status-problem'
+                                : 'status-ok'
+                        } px-6 py-2 rounded-3xl font-bold
+                        text-base shadow-inner min-w-[110px]
+                        text-center"
+                    >
+                        ${
+                            problem
+                                ? 'INCIDENCIA'
+                                : 'ESTABLE'
+                        }
+                    </div>
+
+                    <div data-label="timer-wrap">
+                        ${buildTimerHTML(channel)}
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    onclick='deleteChannel(${idArgument})'
+                    class="ml-3 text-2xl text-slate-400
+                    hover:text-red-400"
+                >
+                    ✕
+                </button>
+            </div>
+        `;
+
+        return card;
+    }
+
+    function updateCardInPlace(card, channel) {
+        const problem = hasProblem(channel);
+
+        card.className =
+            `channel-card flex items-center ` +
+            `justify-between bg-black border ` +
+            `${problem
+                ? 'border-red-500'
+                : 'border-zinc-800'
+            } rounded-3xl px-6 py-4`;
+
+        const imageLabel =
+            card.querySelector(
+                '[data-label="image"]'
+            );
+
+        if (imageLabel) {
+            imageLabel.className =
+                `status-text ${
+                    channel.image
+                        ? 'text-yes'
+                        : 'text-no'
+                }`;
+
+            imageLabel.textContent =
+                channel.image ? 'SÍ' : 'NO';
+        }
+
+        const checkboxes =
+            card.querySelectorAll(
+                'input[type="checkbox"]'
+            );
+
+        if (checkboxes[0]) {
+            checkboxes[0].checked =
+                Boolean(channel.image);
+        }
+
+        const soundLabel =
+            card.querySelector(
+                '[data-label="sound"]'
+            );
+
+        if (soundLabel) {
+            soundLabel.className =
+                `status-text ${
+                    channel.sound
+                        ? 'text-yes'
+                        : 'text-no'
+                }`;
+
+            soundLabel.textContent =
+                channel.sound ? 'SÍ' : 'NO';
+        }
+
+        if (checkboxes[1]) {
+            checkboxes[1].checked =
+                Boolean(channel.sound);
+        }
+
+        const badge =
+            card.querySelector(
+                '[data-label="status"]'
+            );
+
+        if (badge) {
+            badge.className =
+                `${
+                    problem
+                        ? 'status-problem'
+                        : 'status-ok'
+                } px-6 py-2 rounded-3xl font-bold ` +
+                `text-base shadow-inner min-w-[110px] ` +
+                `text-center`;
+
+            badge.textContent =
+                problem
+                    ? 'INCIDENCIA'
+                    : 'ESTABLE';
+        }
+
+        const timerWrap =
+            card.querySelector(
+                '[data-label="timer-wrap"]'
+            );
+
+        if (timerWrap) {
+            timerWrap.innerHTML =
+                buildTimerHTML(channel);
+        }
+    }
+
+    // ==================== HELPERS ====================
+    function hasProblem(channel) {
+        return (
+            !channel.image ||
+            !channel.sound
+        );
+    }
+
+    function sortChannels() {
+        channels.sort((a, b) => {
+            return String(a.number).localeCompare(
+                String(b.number),
+                'es',
+                {
+                    numeric: true,
+                    sensitivity: 'base'
+                }
+            );
+        });
+    }
+
+    function escapeHTML(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    /*
+     * Desactiva el filtro y limpia la búsqueda.
+     * Esto evita que un canal nuevo estable quede oculto.
+     */
+    function showAllChannels() {
+        filterOnlyIncidents = false;
+        searchQuery = '';
+
+        const searchInput =
+            document.getElementById('search-input');
+
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
+        const clearButton =
+            document.getElementById(
+                'search-clear-btn'
+            );
+
+        if (clearButton) {
+            clearButton.classList.remove(
+                'visible'
+            );
+        }
+
+        updateFilterButton();
+
+        lastRenderedIds = '';
+    }
+
+    // ==================== FECHA Y HORA ====================
+    function updateDateTime() {
+        const now = new Date(
+            new Date().toLocaleString(
+                'en-US',
+                {
+                    timeZone: 'America/Lima'
+                }
+            )
+        );
+
+        const pad = value => {
+            return String(value).padStart(2, '0');
+        };
+
+        const element =
+            document.getElementById(
+                'current-datetime'
+            );
+
+        if (element) {
+            element.textContent =
+                `${pad(now.getDate())}/` +
+                `${pad(now.getMonth() + 1)}/` +
+                `${now.getFullYear()} ` +
+                `${pad(now.getHours())}:` +
+                `${pad(now.getMinutes())}`;
+        }
+    }
+
+    // ==================== AGREGAR CANAL ====================
+    async function addChannel() {
+        const numberInput =
+            document.getElementById(
+                'channel-number'
+            );
+
+        const nameInput =
+            document.getElementById(
+                'channel-name'
+            );
+
+        const number = String(
+            numberInput?.value || ''
+        ).trim();
+
+        const name = String(
+            nameInput?.value || ''
+        ).trim();
+
+        if (!number || !name) {
+            alert(
+                'Por favor ingresa el número ' +
+                'y el nombre del canal.'
+            );
+
+            return;
+        }
+
+        const localDuplicate =
+            channels.find(channel => {
+                return (
+                    String(channel.number)
+                        .trim()
+                        .toLowerCase() ===
+                    number.toLowerCase()
+                );
+            });
+
+        if (localDuplicate) {
+            showAllChannels();
+            renderChannels();
+
+            alert(
+                `El canal ${number} ya está ` +
+                `registrado como ` +
+                `“${localDuplicate.name}”.`
+            );
+
+            return;
+        }
+
+        await withLock(async () => {
+            const {
+                data: existing,
+                error: checkError
+            } = await sb
+                .from('GPONTV')
+                .select('id, number, name')
+                .eq('number', number)
+                .limit(1);
+
+            if (checkError) {
+                console.error(
+                    'Duplicate check error:',
+                    checkError
+                );
+
+                alert(
+                    `No se pudo verificar el número ` +
+                    `del canal:\n${checkError.message}`
+                );
+
                 return;
             }
-            empty.classList.add('hidden');
 
-            const idFingerprint = displayed.map(ch => ch.id).join('|');
-
-            if (idFingerprint !== lastRenderedIds) {
-                lastRenderedIds = idFingerprint;
-                container.innerHTML = '';
-                displayed.forEach(ch => container.appendChild(buildCard(ch)));
-            } else {
-                displayed.forEach(ch => {
-                    const existingCard = container.querySelector(`[data-id="${ch.id}"]`);
-                    if (existingCard) updateCardInPlace(existingCard, ch);
-                });
-            }
-        }
-
-        function buildTimerHTML(ch) {
-            if (!hasProblem(ch)) return '';
-            const start = incidentStart[ch.id];
-            const secs = start ? (Date.now() - start) / 1000 : 0;
-            return `<span class="incident-timer">
-                        <span class="dot"></span>
-                        <span data-timer-id="${ch.id}">${formatDuration(secs)}</span>
-                    </span>`;
-        }
-
-        function buildCard(channel) {
-            const problem = hasProblem(channel);
-            const card = document.createElement('div');
-            card.dataset.id = channel.id;
-            card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`;
-            card.innerHTML = `
-                <div class="flex items-center gap-6">
-                    <div class="w-14 text-center">
-                        <div class="text-3xl font-mono font-bold text-orange-400">${channel.number}</div>
-                    </div>
-                    <div><div class="text-xl font-semibold">${channel.name}</div></div>
-                </div>
-                <div class="flex items-center gap-8">
-                    <div class="flex items-center gap-3">
-                        <span class="text-white font-medium w-14 text-sm">IMAGEN</span>
-                        <span data-label="image" class="status-text ${channel.image ? 'text-yes' : 'text-no'}">${channel.image ? 'SÍ' : 'NO'}</span>
-                        <label class="switch">
-                            <input type="checkbox" ${channel.image ? 'checked' : ''} onchange="updateImage(${channel.id}, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <span class="text-white font-medium w-14 text-sm">AUDIO</span>
-                        <span data-label="sound" class="status-text ${channel.sound ? 'text-yes' : 'text-no'}">${channel.sound ? 'SÍ' : 'NO'}</span>
-                        <label class="switch">
-                            <input type="checkbox" ${channel.sound ? 'checked' : ''} onchange="updateSound(${channel.id}, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <div data-label="status" class="${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center">
-                            ${problem ? 'INCIDENCIA' : 'ESTABLE'}
-                        </div>
-                        <div data-label="timer-wrap">${buildTimerHTML(channel)}</div>
-                    </div>
-                    <button onclick="deleteChannel(${channel.id})" class="ml-3 text-2xl text-slate-400 hover:text-red-400">✕</button>
-                </div>
-            `;
-            return card;
-        }
-
-        function updateCardInPlace(card, channel) {
-            const problem = hasProblem(channel);
-            card.className = `channel-card flex items-center justify-between bg-black border ${problem ? 'border-red-500' : 'border-zinc-800'} rounded-3xl px-6 py-4`;
-            const imgLabel = card.querySelector('[data-label="image"]');
-            if (imgLabel) { imgLabel.className = `status-text ${channel.image ? 'text-yes' : 'text-no'}`; imgLabel.textContent = channel.image ? 'SÍ' : 'NO'; }
-            const checkboxes = card.querySelectorAll('input[type="checkbox"]');
-            if (checkboxes[0]) checkboxes[0].checked = channel.image;
-            const sndLabel = card.querySelector('[data-label="sound"]');
-            if (sndLabel) { sndLabel.className = `status-text ${channel.sound ? 'text-yes' : 'text-no'}`; sndLabel.textContent = channel.sound ? 'SÍ' : 'NO'; }
-            if (checkboxes[1]) checkboxes[1].checked = channel.sound;
-            const badge = card.querySelector('[data-label="status"]');
-            if (badge) {
-                badge.className = `${problem ? 'status-problem' : 'status-ok'} px-6 py-2 rounded-3xl font-bold text-base shadow-inner min-w-[110px] text-center`;
-                badge.textContent = problem ? 'INCIDENCIA' : 'ESTABLE';
-            }
-            // Actualizar el timer wrap (aparece/desaparece según estado)
-            const timerWrap = card.querySelector('[data-label="timer-wrap"]');
-            if (timerWrap) timerWrap.innerHTML = buildTimerHTML(channel);
-        }
-
-        // ==================== HELPERS ====================
-        function hasProblem(ch) { return !ch.image || !ch.sound; }
-        function sortChannels() { channels.sort((a, b) => parseInt(a.number) - parseInt(b.number)); }
-
-        // ==================== DATETIME ====================
-        function updateDateTime() {
-            const now = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Lima" }));
-            const pad = n => n.toString().padStart(2, '0');
-            const el = document.getElementById('current-datetime');
-            if (el) el.textContent = `${pad(now.getDate())}/${pad(now.getMonth()+1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-        }
-
-        // ==================== CRUD ====================
-        async function addChannel() {
-            const number = document.getElementById('channel-number').value.trim();
-            const name   = document.getElementById('channel-name').value.trim();
-            if (!number || !name) { alert("Por favor ingresa el número y nombre del canal"); return; }
-            if (channels.some(ch => String(ch.number) === String(number))) {
-                if (!confirm(`Ya existe el canal ${number}. ¿Agregar de todas formas?`)) return;
-            }
-            await withLock(async () => {
-                const { data: existing } = await sb.from('GPONTV').select('id').eq('number', number);
-                if (existing && existing.length > 0) {
-                    if (!confirm(`En la base de datos ya existe el canal ${number}. ¿Agregar de todas formas?`)) return;
-                }
-                const newCh = await insertChannel(number, name);
-                if (newCh) {
-                    channels.push({ id: newCh.id, number: newCh.number, name: newCh.name, image: newCh.image, sound: newCh.sound, incident_since: null });
-                    document.getElementById('channel-number').value = '';
-                    document.getElementById('channel-name').value = '';
-                    lastRenderedIds = '';
-                    renderChannels();
-                }
-            });
-        }
-
-        async function deleteChannel(id) {
-            if (!confirm("¿Eliminar este canal?")) return;
-            await withLock(async () => {
-                await deleteChannelFromDB(id);
-                channels = channels.filter(ch => ch.id !== id);
-                delete incidentStart[id];
-                lastRenderedIds = '';
+            if (
+                existing &&
+                existing.length > 0
+            ) {
+                showAllChannels();
                 renderChannels();
+
+                alert(
+                    `El canal ${number} ya existe ` +
+                    `en la base de datos.`
+                );
+
+                return;
+            }
+
+            const newChannel =
+                await insertChannel(
+                    number,
+                    name
+                );
+
+            if (!newChannel) return;
+
+            channels.push({
+                id: newChannel.id,
+                number: newChannel.number,
+                name: newChannel.name,
+                image:
+                    newChannel.image !== false,
+                sound:
+                    newChannel.sound !== false
             });
-        }
 
-        function updateImage(id, value) {
-            const ch = channels.find(c => c.id === id);
-            if (!ch) return;
-            ch.image = value;
-            syncIncidentStart(ch);
-            renderChannels();
-            debouncedUpdate(id, { image: value });
-        }
+            if (numberInput) {
+                numberInput.value = '';
+            }
 
-        function updateSound(id, value) {
-            const ch = channels.find(c => c.id === id);
-            if (!ch) return;
-            ch.sound = value;
-            syncIncidentStart(ch);
-            renderChannels();
-            debouncedUpdate(id, { sound: value });
-        }
+            if (nameInput) {
+                nameInput.value = '';
+            }
 
-        // ==================== BUSCADOR ====================
-        function updateSearch(value) {
-            searchQuery = value.toLowerCase().trim();
-            const clearBtn = document.getElementById('search-clear-btn');
-            if (clearBtn) clearBtn.classList.toggle('visible', value.length > 0);
-            renderChannels();
-        }
+            /*
+             * El canal nuevo nace estable.
+             * Por eso mostramos todos los canales
+             * después de agregarlo.
+             */
+            showAllChannels();
 
-        function clearSearch() {
-            const input = document.getElementById('search-input');
-            input.value = '';
-            searchQuery = '';
-            document.getElementById('search-clear-btn').classList.remove('visible');
-            input.focus();
-            renderChannels();
-        }
-
-        // ==================== UI TOGGLES ====================
-        function toggleForm() {
-            formVisible = !formVisible;
-            document.getElementById('form-container').style.display = formVisible ? 'block' : 'none';
-            document.getElementById('form-icon').textContent = formVisible ? '▲' : '▼';
-            localStorage.setItem('formVisible', formVisible);
-        }
-
-        function toggleFilter() {
-            filterOnlyIncidents = !filterOnlyIncidents;
-            const btn = document.getElementById('filter-button');
-            document.getElementById('filter-icon').textContent = filterOnlyIncidents ? '📋' : '🔴';
-            document.getElementById('filter-text').textContent = filterOnlyIncidents ? 'FILTRAR TODOS' : 'FILTRAR INCIDENCIAS';
-            btn.classList.toggle('bg-orange-500', filterOnlyIncidents);
-            btn.classList.toggle('text-white', filterOnlyIncidents);
             lastRenderedIds = '';
             renderChannels();
+
+            if (numberInput) {
+                numberInput.focus();
+            }
+        });
+    }
+
+    async function deleteChannel(id) {
+        if (!confirm('¿Eliminar este canal?')) {
+            return;
         }
 
-        function toggleTheme() {
-            isDarkMode = !isDarkMode;
-            document.body.classList.toggle('light', !isDarkMode);
-            document.getElementById('theme-toggle').innerHTML = isDarkMode ? '☀️' : '🌙';
-            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
-        }
+        await withLock(async () => {
+            const success =
+                await deleteChannelFromDB(id);
 
-        // ==================== EXPORT / IMPORT ====================
-        async function deleteAllChannels() {
-            if (channels.length === 0) return alert("No hay canales para eliminar");
-            if (!confirm(`¿Eliminar los ${channels.length} canales? Esta acción no se puede deshacer.`)) return;
-            await withLock(async () => {
-                await sb.from('GPONTV').delete().gte('id', 0);
-                channels = [];
-                Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
-                lastRenderedIds = '';
-                filterOnlyIncidents = false;
-                searchQuery = '';
-                document.getElementById('search-input').value = '';
-                renderChannels();
-            });
-        }
+            if (!success) return;
 
-        function exportData() {
-            if (channels.length === 0) return alert("No hay datos para exportar");
-            let csv = "Número,Nombre,Imagen,Audio,Estado,Tiempo_Avería\n";
-            channels.forEach(ch => {
-                const start = incidentStart[ch.id];
-                const tiempoAveria = start ? formatDuration((Date.now() - start) / 1000) : '';
-                csv += `${ch.number},${ch.name},${ch.image ? "SÍ" : "NO"},${ch.sound ? "SÍ" : "NO"},${hasProblem(ch) ? "INCIDENCIA" : "ESTABLE"},${tiempoAveria}\n`;
-            });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-            a.download = `gpon_tv_${new Date().toISOString().slice(0,10)}.csv`;
-            a.click();
-        }
-
-        function importCSV(input) {
-            const file = input.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                const lines = e.target.result.trim().split('\n');
-                const newChannels = [];
-                for (let i = 1; i < lines.length; i++) {
-                    if (!lines[i].trim()) continue;
-                    const [number, name, image, sound] = lines[i].split(',').map(s => s.trim());
-                    if (number && name) newChannels.push({ number, name, image: image === "SÍ", sound: sound === "SÍ", incident_since: null });
+            channels = channels.filter(
+                channel => {
+                    return (
+                        String(channel.id) !==
+                        String(id)
+                    );
                 }
-                if (newChannels.length === 0) { alert("No se encontraron canales válidos en el CSV"); return; }
-                if (channels.length > 0 && !confirm(`¿Reemplazar los ${channels.length} canales actuales con ${newChannels.length} del CSV?`)) return;
+            );
 
-                await withLock(async () => {
-                    await sb.from('GPONTV').delete().gte('id', 0);
-                    channels = [];
-                    Object.keys(incidentStart).forEach(k => delete incidentStart[k]);
-                    const { data } = await sb.from('GPONTV').insert(newChannels).select();
-                    if (data) {
-                        channels = data.map(r => ({ id: r.id, number: r.number, name: r.name, image: r.image, sound: r.sound, incident_since: r.incident_since || null }));
-                        channels.forEach(syncIncidentStart);
+            delete incidentStart[String(id)];
+            lsClearTimer(id);
+
+            lastRenderedIds = '';
+            renderChannels();
+        });
+    }
+
+    function updateImage(id, value) {
+        const channel = channels.find(item => {
+            return (
+                String(item.id) ===
+                String(id)
+            );
+        });
+
+        if (!channel) return;
+
+        channel.image = Boolean(value);
+
+        syncIncidentStart(channel);
+        renderChannels();
+
+        debouncedUpdate(
+            channel.id,
+            {
+                image: Boolean(value)
+            }
+        );
+    }
+
+    function updateSound(id, value) {
+        const channel = channels.find(item => {
+            return (
+                String(item.id) ===
+                String(id)
+            );
+        });
+
+        if (!channel) return;
+
+        channel.sound = Boolean(value);
+
+        syncIncidentStart(channel);
+        renderChannels();
+
+        debouncedUpdate(
+            channel.id,
+            {
+                sound: Boolean(value)
+            }
+        );
+    }
+
+    // ==================== BUSCADOR ====================
+    function updateSearch(value) {
+        searchQuery = String(value || '')
+            .toLowerCase()
+            .trim();
+
+        const clearButton =
+            document.getElementById(
+                'search-clear-btn'
+            );
+
+        if (clearButton) {
+            clearButton.classList.toggle(
+                'visible',
+                String(value).length > 0
+            );
+        }
+
+        lastRenderedIds = '';
+        renderChannels();
+    }
+
+    function clearSearch() {
+        const input =
+            document.getElementById(
+                'search-input'
+            );
+
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+
+        searchQuery = '';
+
+        const clearButton =
+            document.getElementById(
+                'search-clear-btn'
+            );
+
+        if (clearButton) {
+            clearButton.classList.remove(
+                'visible'
+            );
+        }
+
+        lastRenderedIds = '';
+        renderChannels();
+    }
+
+    // ==================== UI ====================
+    function toggleForm() {
+        formVisible = !formVisible;
+
+        const container =
+            document.getElementById(
+                'form-container'
+            );
+
+        const icon =
+            document.getElementById(
+                'form-icon'
+            );
+
+        if (container) {
+            container.style.display =
+                formVisible
+                    ? 'block'
+                    : 'none';
+        }
+
+        if (icon) {
+            icon.textContent =
+                formVisible
+                    ? '▲'
+                    : '▼';
+        }
+
+        localStorage.setItem(
+            'formVisible',
+            String(formVisible)
+        );
+    }
+
+    function updateFilterButton() {
+        const button =
+            document.getElementById(
+                'filter-button'
+            );
+
+        const icon =
+            document.getElementById(
+                'filter-icon'
+            );
+
+        const text =
+            document.getElementById(
+                'filter-text'
+            );
+
+        if (icon) {
+            icon.textContent =
+                filterOnlyIncidents
+                    ? '📋'
+                    : '🔴';
+        }
+
+        if (text) {
+            text.textContent =
+                filterOnlyIncidents
+                    ? 'MOSTRAR TODOS'
+                    : 'FILTRAR INCIDENCIAS';
+        }
+
+        if (button) {
+            button.classList.toggle(
+                'bg-orange-500',
+                filterOnlyIncidents
+            );
+
+            button.classList.toggle(
+                'text-white',
+                filterOnlyIncidents
+            );
+        }
+    }
+
+    function toggleFilter() {
+        filterOnlyIncidents =
+            !filterOnlyIncidents;
+
+        updateFilterButton();
+
+        lastRenderedIds = '';
+        renderChannels();
+    }
+
+    function updateThemeButton() {
+        const button =
+            document.getElementById(
+                'theme-toggle'
+            );
+
+        if (button) {
+            button.textContent =
+                isDarkMode
+                    ? '☀️'
+                    : '🌙';
+        }
+    }
+
+    function toggleTheme() {
+        isDarkMode = !isDarkMode;
+
+        document.body.classList.toggle(
+            'light',
+            !isDarkMode
+        );
+
+        updateThemeButton();
+
+        localStorage.setItem(
+            'theme',
+            isDarkMode
+                ? 'dark'
+                : 'light'
+        );
+    }
+
+    // ==================== CSV ====================
+    function csvEscape(value) {
+        const text = String(value ?? '');
+
+        return /[",\n\r]/.test(text)
+            ? `"${text.replaceAll('"', '""')}"`
+            : text;
+    }
+
+    function parseCSVLine(line) {
+        const result = [];
+
+        let current = '';
+        let insideQuotes = false;
+
+        for (
+            let i = 0;
+            i < line.length;
+            i++
+        ) {
+            const char = line[i];
+            const next = line[i + 1];
+
+            if (
+                char === '"' &&
+                insideQuotes &&
+                next === '"'
+            ) {
+                current += '"';
+                i++;
+            } else if (char === '"') {
+                insideQuotes = !insideQuotes;
+            } else if (
+                char === ',' &&
+                !insideQuotes
+            ) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+
+        result.push(current.trim());
+
+        return result;
+    }
+
+    async function deleteAllChannels() {
+        if (channels.length === 0) {
+            alert(
+                'No hay canales para eliminar.'
+            );
+
+            return;
+        }
+
+        const accepted = confirm(
+            `¿Eliminar los ${channels.length} ` +
+            `canales? Esta acción no se ` +
+            `puede deshacer.`
+        );
+
+        if (!accepted) return;
+
+        await withLock(async () => {
+            const ids = channels.map(
+                channel => channel.id
+            );
+
+            const { error } = await sb
+                .from('GPONTV')
+                .delete()
+                .in('id', ids);
+
+            if (error) {
+                console.error(
+                    'Delete all error:',
+                    error
+                );
+
+                alert(
+                    `No se pudieron eliminar ` +
+                    `los canales:\n${error.message}`
+                );
+
+                return;
+            }
+
+            channels = [];
+
+            lsClearAllTimers();
+
+            Object
+                .keys(incidentStart)
+                .forEach(key => {
+                    delete incidentStart[key];
+                });
+
+            filterOnlyIncidents = false;
+            searchQuery = '';
+            lastRenderedIds = '';
+
+            const searchInput =
+                document.getElementById(
+                    'search-input'
+                );
+
+            if (searchInput) {
+                searchInput.value = '';
+            }
+
+            updateFilterButton();
+            renderChannels();
+        });
+    }
+
+    function exportData() {
+        if (channels.length === 0) {
+            alert(
+                'No hay datos para exportar.'
+            );
+
+            return;
+        }
+
+        const rows = [
+            [
+                'Número',
+                'Nombre',
+                'Imagen',
+                'Audio',
+                'Estado',
+                'Tiempo_Avería'
+            ]
+        ];
+
+        channels.forEach(channel => {
+            const start =
+                incidentStart[
+                    String(channel.id)
+                ];
+
+            const incidentTime = start
+                ? formatDuration(
+                    (Date.now() - start) / 1000
+                )
+                : '';
+
+            rows.push([
+                channel.number,
+                channel.name,
+                channel.image ? 'SÍ' : 'NO',
+                channel.sound ? 'SÍ' : 'NO',
+                hasProblem(channel)
+                    ? 'INCIDENCIA'
+                    : 'ESTABLE',
+                incidentTime
+            ]);
+        });
+
+        const csv = rows
+            .map(row => {
+                return row
+                    .map(csvEscape)
+                    .join(',');
+            })
+            .join('\n');
+
+        const blob = new Blob(
+            ['\uFEFF', csv],
+            {
+                type: 'text/csv;charset=utf-8'
+            }
+        );
+
+        const url =
+            URL.createObjectURL(blob);
+
+        const link =
+            document.createElement('a');
+
+        link.href = url;
+
+        link.download =
+            `gpon_tv_` +
+            `${new Date()
+                .toISOString()
+                .slice(0, 10)
+            }.csv`;
+
+        document.body.appendChild(link);
+
+        link.click();
+        link.remove();
+
+        URL.revokeObjectURL(url);
+    }
+
+    function importCSV(input) {
+        const file = input.files?.[0];
+
+        if (!file) return;
+
+        const reader = new FileReader();
+
+        reader.onload = async event => {
+            const text = String(
+                event.target?.result || ''
+            )
+                .replace(/^\uFEFF/, '')
+                .trim();
+
+            if (!text) {
+                alert(
+                    'El archivo CSV está vacío.'
+                );
+
+                input.value = '';
+                return;
+            }
+
+            const lines =
+                text.split(/\r?\n/);
+
+            const imported = [];
+            const seenNumbers = new Set();
+
+            for (
+                let i = 1;
+                i < lines.length;
+                i++
+            ) {
+                if (!lines[i].trim()) {
+                    continue;
+                }
+
+                const [
+                    number,
+                    name,
+                    image,
+                    sound
+                ] = parseCSVLine(lines[i]);
+
+                const normalizedNumber =
+                    String(number || '').trim();
+
+                const normalizedName =
+                    String(name || '').trim();
+
+                if (
+                    !normalizedNumber ||
+                    !normalizedName
+                ) {
+                    continue;
+                }
+
+                if (
+                    seenNumbers.has(
+                        normalizedNumber
+                            .toLowerCase()
+                    )
+                ) {
+                    continue;
+                }
+
+                seenNumbers.add(
+                    normalizedNumber
+                        .toLowerCase()
+                );
+
+                imported.push({
+                    number: normalizedNumber,
+                    name: normalizedName,
+
+                    image:
+                        String(image || '')
+                            .toUpperCase() !== 'NO',
+
+                    sound:
+                        String(sound || '')
+                            .toUpperCase() !== 'NO'
+                });
+            }
+
+            if (imported.length === 0) {
+                alert(
+                    'No se encontraron canales ' +
+                    'válidos en el CSV.'
+                );
+
+                input.value = '';
+                return;
+            }
+
+            if (
+                channels.length > 0 &&
+                !confirm(
+                    `¿Reemplazar los ` +
+                    `${channels.length} canales ` +
+                    `actuales con ` +
+                    `${imported.length} del CSV?`
+                )
+            ) {
+                input.value = '';
+                return;
+            }
+
+            await withLock(async () => {
+                if (channels.length > 0) {
+                    const ids = channels.map(
+                        channel => channel.id
+                    );
+
+                    const {
+                        error: deleteError
+                    } = await sb
+                        .from('GPONTV')
+                        .delete()
+                        .in('id', ids);
+
+                    if (deleteError) {
+                        console.error(
+                            'Import delete error:',
+                            deleteError
+                        );
+
+                        alert(
+                            `No se pudieron eliminar ` +
+                            `los canales actuales:\n` +
+                            `${deleteError.message}`
+                        );
+
+                        return;
                     }
-                    filterOnlyIncidents = false;
-                    searchQuery = '';
-                    document.getElementById('search-input').value = '';
+                }
+
+                const {
+                    data,
+                    error: insertError
+                } = await sb
+                    .from('GPONTV')
+                    .insert(imported)
+                    .select(
+                        'id, number, name, ' +
+                        'image, sound'
+                    );
+
+                if (insertError) {
+                    console.error(
+                        'Import insert error:',
+                        insertError
+                    );
+
+                    alert(
+                        `No se pudo importar el CSV:\n` +
+                        `${insertError.message}`
+                    );
+
+                    await loadChannels();
+
                     lastRenderedIds = '';
                     renderChannels();
-                    alert(`Se importaron ${channels.length} canales`);
-                });
-            };
-            reader.readAsText(file);
-            input.value = '';
-        }
 
-        // ==================== REALTIME ====================
-        let realtimeChannel = null;
-        let realtimeRetryTimer = null;
+                    return;
+                }
 
-        function setRealtimeStatus(status) {
-            const dot = document.getElementById('realtime-dot');
-            const label = document.getElementById('realtime-label');
-            if (!dot || !label) return;
-            const map = {
-                connected:    { cls: 'bg-green-500',  text: 'ONLINE' },
-                disconnected: { cls: 'bg-red-500',    text: 'SIN CONEXIÓN' },
-                reconnecting: { cls: 'bg-yellow-400', text: 'RECONECTANDO…' },
-            };
-            const s = map[status] || map.disconnected;
-            dot.className   = `w-2 h-2 rounded-full ${s.cls} ${status === 'connected' ? 'animate-pulse' : ''}`;
-            label.textContent = s.text;
-        }
+                channels = (data || []).map(
+                    row => ({
+                        id: row.id,
+                        number: row.number,
+                        name: row.name,
 
-        function setupRealtime() {
-            if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
-            clearTimeout(realtimeRetryTimer);
-            setRealtimeStatus('reconnecting');
+                        image:
+                            row.image !== false,
 
-            realtimeChannel = sb.channel('gpontv-live', {
-                config: { broadcast: { self: false } }
+                        sound:
+                            row.sound !== false
+                    })
+                );
+
+                lsClearAllTimers();
+
+                Object
+                    .keys(incidentStart)
+                    .forEach(key => {
+                        delete incidentStart[key];
+                    });
+
+                channels.forEach(
+                    syncIncidentStart
+                );
+
+                showAllChannels();
+
+                lastRenderedIds = '';
+                renderChannels();
+
+                alert(
+                    `Se importaron ` +
+                    `${channels.length} canales.`
+                );
             });
 
-            realtimeChannel
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'GPONTV' }, (payload) => {
-                    if (operationInProgress) return;
+            input.value = '';
+        };
 
-                    if (payload.eventType === 'INSERT') {
+        reader.onerror = () => {
+            alert(
+                'No se pudo leer el archivo CSV.'
+            );
+
+            input.value = '';
+        };
+
+        reader.readAsText(
+            file,
+            'UTF-8'
+        );
+    }
+
+    // ==================== REALTIME ====================
+    let realtimeChannel = null;
+    let realtimeRetryTimer = null;
+
+    function setRealtimeStatus(status) {
+        const dot =
+            document.getElementById(
+                'realtime-dot'
+            );
+
+        const label =
+            document.getElementById(
+                'realtime-label'
+            );
+
+        if (!dot || !label) return;
+
+        const states = {
+            connected: {
+                className: 'bg-green-500',
+                text: 'ONLINE'
+            },
+
+            disconnected: {
+                className: 'bg-red-500',
+                text: 'SIN CONEXIÓN'
+            },
+
+            reconnecting: {
+                className: 'bg-yellow-400',
+                text: 'RECONECTANDO…'
+            }
+        };
+
+        const state =
+            states[status] ||
+            states.disconnected;
+
+        dot.className =
+            `w-2 h-2 rounded-full ` +
+            `${state.className} ` +
+            `${status === 'connected'
+                ? 'animate-pulse'
+                : ''
+            }`;
+
+        label.textContent = state.text;
+    }
+
+    function setupRealtime() {
+        if (realtimeChannel) {
+            sb.removeChannel(
+                realtimeChannel
+            );
+
+            realtimeChannel = null;
+        }
+
+        clearTimeout(
+            realtimeRetryTimer
+        );
+
+        setRealtimeStatus(
+            'reconnecting'
+        );
+
+        realtimeChannel =
+            sb.channel('gpontv-live');
+
+        realtimeChannel
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'GPONTV'
+                },
+                payload => {
+                    if (
+                        payload.eventType ===
+                        'INSERT'
+                    ) {
                         const row = payload.new;
-                        if (!channels.find(c => c.id === row.id)) {
-                            const ch = { id: row.id, number: row.number, name: row.name, image: row.image, sound: row.sound, incident_since: row.incident_since || null };
-                            channels.push(ch);
-                            syncIncidentStart(ch);
+
+                        const alreadyExists =
+                            channels.some(
+                                channel => {
+                                    return (
+                                        String(
+                                            channel.id
+                                        ) ===
+                                        String(
+                                            row.id
+                                        )
+                                    );
+                                }
+                            );
+
+                        if (!alreadyExists) {
+                            const channel = {
+                                id: row.id,
+                                number: row.number,
+                                name: row.name,
+
+                                image:
+                                    row.image !== false,
+
+                                sound:
+                                    row.sound !== false
+                            };
+
+                            channels.push(channel);
+
+                            syncIncidentStart(
+                                channel
+                            );
+
                             lastRenderedIds = '';
                             renderChannels();
                         }
-                    } else if (payload.eventType === 'UPDATE') {
+                    }
+
+                    if (
+                        payload.eventType ===
+                        'UPDATE'
+                    ) {
                         const row = payload.new;
-                        const ch = channels.find(c => c.id === row.id);
-                        if (ch) {
-                            ch.image = row.image;
-                            ch.sound = row.sound;
-                            ch.name  = row.name;
-                            ch.incident_since = row.incident_since || null;
-                            syncIncidentStart(ch);
+
+                        const channel =
+                            channels.find(
+                                item => {
+                                    return (
+                                        String(
+                                            item.id
+                                        ) ===
+                                        String(
+                                            row.id
+                                        )
+                                    );
+                                }
+                            );
+
+                        if (channel) {
+                            channel.number =
+                                row.number;
+
+                            channel.name =
+                                row.name;
+
+                            channel.image =
+                                row.image !== false;
+
+                            channel.sound =
+                                row.sound !== false;
+
+                            syncIncidentStart(
+                                channel
+                            );
+
                             renderChannels();
                         }
-                    } else if (payload.eventType === 'DELETE') {
-                        const id = payload.old.id;
-                        channels = channels.filter(c => c.id !== id);
-                        delete incidentStart[id];
+                    }
+
+                    if (
+                        payload.eventType ===
+                        'DELETE'
+                    ) {
+                        const id =
+                            payload.old.id;
+
+                        channels =
+                            channels.filter(
+                                channel => {
+                                    return (
+                                        String(
+                                            channel.id
+                                        ) !==
+                                        String(id)
+                                    );
+                                }
+                            );
+
+                        delete incidentStart[
+                            String(id)
+                        ];
+
+                        lsClearTimer(id);
+
                         lastRenderedIds = '';
                         renderChannels();
                     }
-                })
-                .subscribe((status, err) => {
-                    if (status === 'SUBSCRIBED') {
-                        setRealtimeStatus('connected');
-                        clearTimeout(realtimeRetryTimer);
-                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-                        setRealtimeStatus('disconnected');
-                        realtimeRetryTimer = setTimeout(setupRealtime, 5000);
-                    }
-                });
-        }
+                }
+            )
+            .subscribe(status => {
+                if (
+                    status ===
+                    'SUBSCRIBED'
+                ) {
+                    setRealtimeStatus(
+                        'connected'
+                    );
 
-        // ==================== INIT ====================
-        window.onload = async () => {
-            if (localStorage.getItem('theme') === 'light') {
-                isDarkMode = false;
-                document.body.classList.add('light');
-                document.getElementById('theme-toggle').innerHTML = '☀️';
+                    clearTimeout(
+                        realtimeRetryTimer
+                    );
+
+                    return;
+                }
+
+                if (
+                    status ===
+                        'CHANNEL_ERROR' ||
+                    status ===
+                        'TIMED_OUT' ||
+                    status ===
+                        'CLOSED'
+                ) {
+                    setRealtimeStatus(
+                        'disconnected'
+                    );
+
+                    realtimeRetryTimer =
+                        setTimeout(
+                            setupRealtime,
+                            5000
+                        );
+                }
+            });
+    }
+
+    // ==================== INIT ====================
+    window.addEventListener(
+        'load',
+        async () => {
+            const savedTheme =
+                localStorage.getItem(
+                    'theme'
+                );
+
+            isDarkMode =
+                savedTheme !== 'light';
+
+            document.body.classList.toggle(
+                'light',
+                !isDarkMode
+            );
+
+            updateThemeButton();
+
+            const savedForm =
+                localStorage.getItem(
+                    'formVisible'
+                );
+
+            formVisible =
+                savedForm !== 'false';
+
+            const formContainer =
+                document.getElementById(
+                    'form-container'
+                );
+
+            const formIcon =
+                document.getElementById(
+                    'form-icon'
+                );
+
+            if (formContainer) {
+                formContainer.style.display =
+                    formVisible
+                        ? 'block'
+                        : 'none';
             }
-            const savedForm = localStorage.getItem('formVisible');
-            formVisible = savedForm !== 'false';
-            document.getElementById('form-container').style.display = formVisible ? 'block' : 'none';
-            document.getElementById('form-icon').textContent = formVisible ? '▲' : '▼';
+
+            if (formIcon) {
+                formIcon.textContent =
+                    formVisible
+                        ? '▲'
+                        : '▼';
+            }
 
             showLoading(true);
+
             await loadChannels();
+
             showLoading(false);
 
-            // Iniciar con filtro de incidencias activo
-            filterOnlyIncidents = true;
-            document.getElementById('filter-icon').textContent = '📋';
-            document.getElementById('filter-text').textContent = 'FILTRAR TODOS';
-            const filterBtn = document.getElementById('filter-button');
-            filterBtn.classList.add('bg-orange-500', 'text-white');
+            /*
+             * La página inicia mostrando todos
+             * los canales. Así los canales nuevos
+             * no quedan ocultos.
+             */
+            filterOnlyIncidents = false;
+
+            updateFilterButton();
+
             lastRenderedIds = '';
-
             renderChannels();
+
             setupRealtime();
-
             updateDateTime();
-            setInterval(updateDateTime, 1000);
 
-            // Tick de timers cada segundo (sin reconstruir DOM)
-            setInterval(tickTimers, 1000);
+            setInterval(
+                updateDateTime,
+                1000
+            );
 
-            document.getElementById('channel-name').addEventListener('keypress', e => {
-                if (e.key === 'Enter') addChannel();
+            setInterval(
+                tickTimers,
+                1000
+            );
+
+            const numberInput =
+                document.getElementById(
+                    'channel-number'
+                );
+
+            const nameInput =
+                document.getElementById(
+                    'channel-name'
+                );
+
+            [
+                numberInput,
+                nameInput
+            ].forEach(input => {
+                if (!input) return;
+
+                input.addEventListener(
+                    'keydown',
+                    event => {
+                        if (
+                            event.key ===
+                            'Enter'
+                        ) {
+                            event.preventDefault();
+                            addChannel();
+                        }
+                    }
+                );
             });
-        };
-    </script>
+        }
+    );
+</script>
 </body>
 </html>
