@@ -240,6 +240,50 @@
             padding:9px 11px;
             background:rgba(24,24,27,.45);
         }
+        .channel-history-event {
+            border:1px solid #27272a;
+            border-radius:14px;
+            padding:10px 12px;
+            background:rgba(24,24,27,.48);
+        }
+        .channel-history-event + .channel-history-event {
+            margin-top:8px;
+        }
+        .channel-history-day {
+            margin-top:14px;
+        }
+        .channel-history-day:first-child {
+            margin-top:0;
+        }
+        .channel-history-day-header {
+            position:sticky;
+            top:0;
+            z-index:3;
+            display:flex;
+            align-items:center;
+            justify-content:space-between;
+            gap:12px;
+            padding:8px 10px;
+            margin-bottom:8px;
+            border:1px solid #3f3f46;
+            border-radius:12px;
+            background:rgba(9,9,11,.96);
+            backdrop-filter:blur(10px);
+        }
+        .channel-history-day-title {
+            font-size:.72rem;
+            font-weight:800;
+            letter-spacing:.35px;
+            color:#fb923c;
+            text-transform:uppercase;
+        }
+        .channel-history-day-count {
+            font-size:.68rem;
+            color:#71717a;
+            white-space:nowrap;
+        }
+
+
 
         .source-online { color:#86efac; border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
         .source-down { color:#fca5a5; border-color:rgba(239,68,68,.55); background:rgba(239,68,68,.10); }
@@ -401,6 +445,57 @@
                         <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en DTVSOL <span id="source-disabled-title"></span></summary>
                         <div id="source-disabled-list" class="px-4 pb-4 text-sm text-slate-400 grid md:grid-cols-2 gap-2"></div>
                     </details>
+                </div>
+            </div>
+        </div>
+
+        <!-- HISTORIAL INDIVIDUAL DEL CANAL -->
+        <div id="channel-history-modal"
+             class="hidden fixed inset-0 z-[10020] bg-black/75 backdrop-blur-sm p-4"
+             onclick="closeChannelHistory(event)">
+            <div class="max-w-2xl mx-auto mt-12 bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden"
+                 onclick="event.stopPropagation()">
+
+                <div class="flex items-start justify-between gap-4 px-6 py-5 border-b border-zinc-800">
+                    <div class="min-w-0">
+                        <div class="text-xs font-semibold tracking-wider text-orange-400 mb-1">
+                            HISTORIAL DTVSOL
+                        </div>
+                        <h3 id="channel-history-title"
+                            class="text-xl font-semibold text-white truncate">
+                            Canal
+                        </h3>
+                        <p id="channel-history-subtitle"
+                           class="text-xs text-slate-400 mt-1">
+                            Historial de hoy
+                        </p>
+                    </div>
+
+                    <button type="button"
+                            onclick="closeChannelHistory()"
+                            class="text-2xl text-slate-400 hover:text-white shrink-0">
+                        ✕
+                    </button>
+                </div>
+
+                <div id="channel-history-summary"
+                     class="grid grid-cols-2 md:grid-cols-4 gap-3 px-6 pt-5">
+                </div>
+
+                <div class="px-6 py-5">
+                    <div id="channel-history-loading"
+                         class="hidden text-sm text-slate-400 py-6 text-center">
+                        Cargando historial…
+                    </div>
+
+                    <div id="channel-history-empty"
+                         class="hidden text-sm text-slate-500 py-6 text-center">
+                        No hay cambios registrados en los últimos 30 días para este canal.
+                    </div>
+
+                    <div id="channel-history-list"
+                         class="max-h-[55vh] overflow-y-auto pr-1">
+                    </div>
                 </div>
             </div>
         </div>
@@ -665,60 +760,98 @@
         const stableChecks = Math.max(0, Number(channel.source_stable_checks || 0));
         const failures = Math.max(0, Number(channel.source_failure_count_8h || 0));
         const changes = Math.max(0, Number(channel.source_change_count_30m || 0));
+        const sourceOnline = channel.source_state === 'online';
+
+        const availability =
+            channel.source_proxies_online !== null &&
+            channel.source_proxies_online !== undefined &&
+            channel.source_proxies_total !== null &&
+            channel.source_proxies_total !== undefined
+                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
+                : null;
+
+        const lastChange = channel.source_last_transition_at
+            ? new Date(channel.source_last_transition_at).toLocaleTimeString('es-PE', {
+                timeZone: 'America/Lima',
+                hour: '2-digit',
+                minute: '2-digit'
+            })
+            : null;
 
         let label = '';
         let cls = '';
         const detail = [];
 
-        if (instability === 'flapping') {
-            label = '⚠ INESTABLE';
+        /*
+         * OBSERVACIÓN describe lo que está pasando AHORA, por eso tiene
+         * prioridad visual sobre el antecedente de inestabilidad.
+         */
+        if (observing) {
+            label = `⏱ RECUPERACIÓN ${stableChecks} DE 3`;
+            cls = 'health-observing';
+
+            detail.push('RECUPERACIÓN EN OBSERVACIÓN');
+            detail.push('El canal está operativo, pero todavía no se confirma estable.');
+
+            if (instability === 'flapping') {
+                detail.push('Antecedente: flapping detectado en las últimas 8 h.');
+            } else if (instability === 'possible') {
+                detail.push('Antecedente: presentó inestabilidad recientemente.');
+            }
+
+            if (availability) detail.push(`Estado actual: ${availability}`);
+            detail.push(`Validación: ${stableChecks}/3`);
+            detail.push('Solo cuenta una revisión nueva si pasó ~10 min.');
+
+        } else if (instability === 'flapping') {
+            label = sourceOnline
+                ? '⚠ FLAPPING RECIENTE'
+                : '⚠ INESTABLE';
             cls = 'health-unstable';
-            detail.push('FLAPPING / OSCILACIÓN DE ESTADO');
-            detail.push('El canal alterna repetidamente entre disponible y caído en intervalos cortos.');
-            detail.push('Se detectaron recuperaciones transitorias seguidas de nuevas caídas.');
+
+            if (sourceOnline) {
+                detail.push('FLAPPING RECIENTE');
+                detail.push('El canal está operativo ahora, pero presentó oscilaciones entre caído y operativo en las últimas 8 h.');
+            } else {
+                detail.push('FLAPPING DETECTADO');
+                detail.push('El canal está alternando entre caído y operativo.');
+            }
+
+            if (availability) detail.push(`Estado actual: ${availability}`);
+            if (changes > 0) detail.push(`Cambios recientes: ${changes} en 30 min`);
+            if (lastChange) detail.push(`Último cambio: ${lastChange}`);
+
         } else if (instability === 'possible') {
-            label = '⚠ INESTABLE';
+            label = sourceOnline
+                ? '⚠ INESTABLE RECIENTE'
+                : '⚠ INESTABLE';
             cls = 'health-unstable';
-            detail.push('POSIBLE FLAPPING / INESTABILIDAD');
-            detail.push('El canal levantó temporalmente y volvió a caer durante el período de observación.');
-            detail.push('Se mantiene bajo vigilancia para confirmar si continúa oscilando.');
+
+            if (sourceOnline) {
+                detail.push('INESTABILIDAD RECIENTE');
+                detail.push('El canal está operativo ahora, pero levantó y volvió a caer recientemente.');
+            } else {
+                detail.push('POSIBLE INESTABILIDAD');
+                detail.push('El canal levantó, pero volvió a caer poco después.');
+            }
+
+            if (availability) detail.push(`Estado actual: ${availability}`);
+            if (changes > 0) detail.push(`Cambios recientes: ${changes} en 30 min`);
+            if (lastChange) detail.push(`Último cambio: ${lastChange}`);
+
         } else if (recurrent) {
             label = '⚠ RECURRENTE';
             cls = 'health-recurrent';
+
             detail.push('PROBLEMAS RECURRENTES');
-            detail.push('El canal registra varias caídas dentro de las últimas 8 horas.');
-            detail.push('No implica necesariamente flapping, pero indica una afectación repetitiva.');
-        } else if (observing) {
-            label = `⏱ OBSERVACIÓN ${stableChecks}/3`;
-            cls = 'health-observing';
-            detail.push('RECUPERACIÓN EN OBSERVACIÓN');
-            detail.push('El canal volvió a estado disponible, pero aún no se considera estable.');
-            detail.push('Se realiza una sola verificación cada 10 minutos.');
+            detail.push('El canal ha presentado varias fallas durante las últimas 8 h.');
+
+            if (failures > 0) detail.push(`Caídas/reincidencias: ${failures}`);
+            if (availability) detail.push(`Estado actual: ${availability}`);
+            if (lastChange) detail.push(`Último cambio: ${lastChange}`);
+
         } else {
             return '';
-        }
-
-        if (observing) {
-            detail.push(`Verificaciones correctas consecutivas: ${stableChecks}/3`);
-            detail.push('Con 3 verificaciones correctas (~30 min) se marca RESTABLECIDO ESTABLE.');
-        }
-
-        if (recurrent || failures > 0) {
-            detail.push(`Caídas/reincidencias últimas 8 h: ${failures}`);
-        }
-
-        if (instability !== 'normal' || changes > 0) {
-            detail.push(`Cambios de estado últimos 30 min: ${changes}`);
-        }
-
-        if (channel.source_last_transition_at) {
-            detail.push(
-                `Último cambio: ${new Date(channel.source_last_transition_at).toLocaleTimeString('es-PE', {
-                    timeZone: 'America/Lima',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                })}`
-            );
         }
 
         return `<span class="health-badge ${cls}" data-tooltip="${escapeHTML(detail.join('\n'))}">${escapeHTML(label)}</span>`;
@@ -740,6 +873,242 @@
         return new Date(
             `${values.year}-${values.month}-${values.day}T00:00:00-05:00`
         ).toISOString();
+    }
+
+    function channelHistorySummaryCard(label, value, tone = 'text-white') {
+        return `
+            <div class="border border-zinc-800 rounded-2xl bg-zinc-900/30 px-3 py-3">
+                <div class="text-[10px] uppercase tracking-wider text-zinc-500">${escapeHTML(label)}</div>
+                <div class="mt-1 font-semibold ${tone}">${escapeHTML(value)}</div>
+            </div>
+        `;
+    }
+
+    function limaDateParts(value) {
+        const parts = new Intl.DateTimeFormat('es-PE', {
+            timeZone: 'America/Lima',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            weekday: 'long'
+        }).formatToParts(new Date(value));
+
+        const result = {};
+        parts.forEach(part => {
+            if (part.type !== 'literal') result[part.type] = part.value;
+        });
+
+        return result;
+    }
+
+    function limaDateKey(value) {
+        const parts = limaDateParts(value);
+        return `${parts.year}-${parts.month}-${parts.day}`;
+    }
+
+    function limaDateLabel(value) {
+        const parts = limaDateParts(value);
+        const eventKey = `${parts.year}-${parts.month}-${parts.day}`;
+        const todayKey = limaDateKey(new Date());
+        const yesterdayKey = limaDateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+
+        const weekday = String(parts.weekday || '')
+            .replace(/^./, char => char.toUpperCase());
+
+        const date = `${parts.day}/${parts.month}/${parts.year}`;
+
+        if (eventKey === todayKey) return `HOY · ${weekday} ${date}`;
+        if (eventKey === yesterdayKey) return `AYER · ${weekday} ${date}`;
+
+        return `${weekday} ${date}`;
+    }
+
+    function channelHistoryStartIso(days = 30) {
+        return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    }
+
+    function renderChannelHistoryGrouped(events) {
+        const groups = new Map();
+
+        events.forEach(event => {
+            const key = limaDateKey(event.created_at);
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(event);
+        });
+
+        return Array.from(groups.values()).map(dayEvents => {
+            const first = dayEvents[0];
+            const dayLabel = limaDateLabel(first.created_at);
+
+            const eventHtml = dayEvents.map(event => {
+                const time = new Date(event.created_at).toLocaleTimeString('es-PE', {
+                    timeZone: 'America/Lima',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+
+                const availabilityEvent =
+                    event.proxies_online !== null &&
+                    event.proxies_online !== undefined &&
+                    event.proxies_total !== null &&
+                    event.proxies_total !== undefined
+                        ? `${event.proxies_online}/${event.proxies_total}`
+                        : '—';
+
+                const description = channelHistoryEventDescription(event);
+
+                return `
+                    <div class="channel-history-event">
+                        <div class="flex items-center justify-between gap-3 flex-wrap">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-mono text-orange-400">${escapeHTML(time)}</span>
+                                <span class="text-xs font-bold text-amber-300">
+                                    ${escapeHTML(historyEventLabel(event.event_type))}
+                                </span>
+                            </div>
+
+                            <span class="source-pill ${event.source_state ? `source-${escapeHTML(event.source_state)}` : 'source-unknown'}">
+                                ${escapeHTML(availabilityEvent)}
+                            </span>
+                        </div>
+
+                        ${description
+                            ? `<div class="text-xs text-slate-400 mt-2">${escapeHTML(description)}</div>`
+                            : ''}
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <section class="channel-history-day">
+                    <div class="channel-history-day-header">
+                        <span class="channel-history-day-title">${escapeHTML(dayLabel)}</span>
+                        <span class="channel-history-day-count">
+                            ${dayEvents.length} ${dayEvents.length === 1 ? 'evento' : 'eventos'}
+                        </span>
+                    </div>
+                    ${eventHtml}
+                </section>
+            `;
+        }).join('');
+    }
+
+    function channelHistoryEventDescription(event) {
+        const descriptions = {
+            down: 'Se detectó caída del canal.',
+            degraded: 'Se detectó degradación de disponibilidad.',
+            recovery_observed: 'El canal volvió a estar operativo y entró en observación.',
+            stable: 'Completó las verificaciones consecutivas y quedó restablecido estable.',
+            reincident: 'El canal volvió a caer después de una recuperación estable.',
+            possible_instability: 'Levantó temporalmente y volvió a caer poco después.',
+            flapping: 'Se detectó oscilación repetida entre operativo y caído.',
+            recurrent: 'Se detectaron múltiples fallas dentro de la ventana de 8 horas.'
+        };
+
+        return event.details || descriptions[event.event_type] || '';
+    }
+
+    async function openChannelHistory(channelId) {
+        if (manualMode) return;
+
+        const channel = channels.find(item => String(item.id) === String(channelId));
+        if (!channel) return;
+
+        const modal = document.getElementById('channel-history-modal');
+        const title = document.getElementById('channel-history-title');
+        const subtitle = document.getElementById('channel-history-subtitle');
+        const summary = document.getElementById('channel-history-summary');
+        const list = document.getElementById('channel-history-list');
+        const loading = document.getElementById('channel-history-loading');
+        const empty = document.getElementById('channel-history-empty');
+
+        if (!modal || !title || !summary || !list || !loading || !empty) return;
+
+        title.textContent = `${channel.number} · ${channel.name}`;
+        if (subtitle) subtitle.textContent = 'Últimos 30 días · organizado por fecha · hora Lima';
+
+        const availability =
+            channel.source_proxies_online !== null &&
+            channel.source_proxies_online !== undefined &&
+            channel.source_proxies_total !== null &&
+            channel.source_proxies_total !== undefined
+                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
+                : '?';
+
+        const instability =
+            channel.source_observing
+                ? `RECUPERACIÓN ${channel.source_stable_checks || 0} DE 3`
+                : channel.source_instability === 'flapping'
+                    ? (channel.source_state === 'online' ? 'FLAPPING RECIENTE' : 'FLAPPING')
+                    : channel.source_instability === 'possible'
+                        ? (channel.source_state === 'online' ? 'INEST. RECIENTE' : 'POSIBLE INEST.')
+                        : channel.source_recurrent
+                            ? 'RECURRENTE'
+                            : 'NORMAL';
+
+        summary.innerHTML =
+            channelHistorySummaryCard('PROXIES', availability, 'text-orange-300') +
+            channelHistorySummaryCard('ESTADO', sourceStateText(channel), 'text-white') +
+            channelHistorySummaryCard(
+                'CONDICIÓN',
+                instability,
+                instability === 'NORMAL' ? 'text-green-300' : 'text-amber-300'
+            ) +
+            channelHistorySummaryCard(
+                'FALLAS 8H',
+                String(channel.source_failure_count_8h || 0),
+                Number(channel.source_failure_count_8h || 0) > 0
+                    ? 'text-red-300'
+                    : 'text-slate-300'
+            );
+
+        modal.classList.remove('hidden');
+        list.innerHTML = '';
+        empty.classList.add('hidden');
+        loading.classList.remove('hidden');
+
+        try {
+            let query = sb
+                .from('GPONTV_EVENTS')
+                .select(
+                    'id, channel_id, source_channel_id, channel_number, channel_name, event_type, source_state, proxies_online, proxies_total, details, created_at'
+                )
+                .gte('created_at', channelHistoryStartIso(30))
+                .order('created_at', { ascending: false })
+                .limit(1000);
+
+            if (channel.source_channel_id !== null && channel.source_channel_id !== undefined) {
+                query = query.eq('source_channel_id', channel.source_channel_id);
+            } else {
+                query = query.eq('channel_id', channel.id);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            const events = data || [];
+            loading.classList.add('hidden');
+
+            if (!events.length) {
+                empty.classList.remove('hidden');
+                return;
+            }
+
+            list.innerHTML = renderChannelHistoryGrouped(events);
+
+        } catch (error) {
+            console.error('Error cargando historial del canal:', error);
+            loading.classList.add('hidden');
+            empty.classList.remove('hidden');
+            empty.textContent = 'No se pudo cargar el historial del canal.';
+        }
+    }
+
+    function closeChannelHistory(event) {
+        if (event && event.target !== event.currentTarget) return;
+
+        const modal = document.getElementById('channel-history-modal');
+        if (modal) modal.classList.add('hidden');
     }
 
     async function loadSourceHistory() {
@@ -1858,9 +2227,17 @@ ${error.message}`);
 
             if (!manualMode) {
                 if (channel.source_instability === 'flapping') {
-                    issues.push('Inestable: flapping detectado');
+                    issues.push(
+                        channel.source_state === 'online' && !channel.source_observing
+                            ? 'Inestabilidad reciente: flapping'
+                            : 'Inestable: flapping detectado'
+                    );
                 } else if (channel.source_instability === 'possible') {
-                    issues.push('Posible inestabilidad: recuperación transitoria');
+                    issues.push(
+                        channel.source_state === 'online' && !channel.source_observing
+                            ? 'Inestabilidad reciente'
+                            : 'Posible inestabilidad: recuperación transitoria'
+                    );
                 } else if (channel.source_recurrent === true) {
                     const failures = Math.max(
                         0,
@@ -2221,6 +2598,17 @@ ${error.message}`);
             </div>
             ${reviewHtml}
         `;
+
+        card.addEventListener('contextmenu', event => {
+            if (manualMode) return;
+
+            event.preventDefault();
+            openChannelHistory(channel.id);
+        });
+
+        card.title = manualMode
+            ? ''
+            : 'Clic derecho para ver el historial DTVSOL del canal';
 
         return card;
     }
@@ -2736,6 +3124,7 @@ ${error.message}`);
             }
 
             closeSourceInventory();
+            closeChannelHistory();
             await closeDtvsolNotifications();
         }
 
