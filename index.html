@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPON TV • Reporte NOC</title>
+    <title>GPON TV • Reporte NOC V7</title>
     <link rel="icon" type="image/png" href="./favicon.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -424,7 +424,10 @@
         'source_proxies_total',
         'source_last_checked',
         'source_outage_since',
-        'source_review_status'
+        'source_review_status',
+        'incident_open',
+        'incident_since',
+        'incident_origin'
     ];
 
     const CHANNEL_SELECT =
@@ -456,7 +459,10 @@
                     : Number(row.source_proxies_total),
             source_last_checked: row.source_last_checked || null,
             source_outage_since: row.source_outage_since || null,
-            source_review_status: row.source_review_status || 'none'
+            source_review_status: row.source_review_status || 'none',
+            incident_open: row.incident_open === true,
+            incident_since: row.incident_since || null,
+            incident_origin: row.incident_origin || null
         };
     }
 
@@ -481,7 +487,7 @@
     }
 
     function isIncident(channel) {
-        return hasManualProblem(channel) || isSourceIncident(channel);
+        return Boolean(channel.incident_open) || hasManualProblem(channel) || isSourceIncident(channel);
     }
 
     function needsAttention(channel) {
@@ -496,14 +502,14 @@
                 ? ` ${online}/${total}`
                 : '';
 
-        /* 3/3 = disponibilidad DTVSOL; no confirma imagen/audio. */
+        /* El texto es neutro; el color indica estado DTVSOL. */
         const labels = {
-            online: `DTVSOL DISPONIBLE${availability}`,
-            down: `CAÍDO DTVSOL${availability}`,
-            degraded: `DEGRADADO DTVSOL${availability}`,
-            disabled: 'DESACTIVADO EN DTVSOL',
-            missing: 'NO ENCONTRADO EN DTVSOL',
-            unknown: 'SIN DATOS DTVSOL'
+            online: `DTVSOL${availability}`,
+            down: `DTVSOL${availability}`,
+            degraded: `DTVSOL${availability}`,
+            disabled: 'DTVSOL OFF',
+            missing: 'DTVSOL ?',
+            unknown: 'DTVSOL ?'
         };
 
         return labels[channel.source_state] || labels.unknown;
@@ -564,9 +570,9 @@
         if (dot) dot.className = `source-dot ${status}`;
         if (label) label.textContent = details;
 
-        if (count && sourceLastResult?.ok) {
+        if (count && (sourceLastResult?.ok || channels.some(channel => channel.source_channel_id !== null && channel.source_channel_id !== undefined))) {
             const stats = sourceInventoryStats();
-            const total = sourceLastResult.fetched ?? stats.synced.length;
+            const total = sourceLastResult?.fetched ?? stats.synced.length;
             count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS`;
             count.className = 'source-pill source-online cursor-pointer';
         } else if (count && status === 'error') {
@@ -770,6 +776,34 @@
         }
     }
 
+
+    async function showPersistentRecoveryNotification(channel) {
+        if (!alertsEnabled() || Notification.permission !== 'granted') return;
+
+        const availability =
+            channel.source_proxies_online !== null &&
+            channel.source_proxies_total !== null
+                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
+                : 'sin disponibilidad';
+        const key = String(channel.source_channel_id ?? channel.id);
+        const options = {
+            body: `Canal ${channel.number} · ${channel.name}\nDTVSOL RESTABLECIDO · Disponibilidad: ${availability}`,
+            tag: `dtvsol-recovery-${key}-${Date.now()}`,
+            renotify: true,
+            requireInteraction: true,
+            icon: './favicon.png',
+            badge: './favicon.png',
+            data: { channel: String(channel.number), key, type: 'recovered' }
+        };
+
+        const registration = await getNotificationRegistration();
+        if (registration) {
+            await registration.showNotification('✅ DTVSOL · CANAL RESTABLECIDO', options);
+        } else {
+            new Notification('✅ DTVSOL · CANAL RESTABLECIDO', options);
+        }
+    }
+
     async function processBrowserNotifications() {
         if (!alertsEnabled() || !('Notification' in window) || Notification.permission !== 'granted') {
             return;
@@ -787,8 +821,17 @@
                     changed = true;
                     await showPersistentIncidentNotification(channel);
                 }
-            } else if (notified.delete(key)) {
+                continue;
+            }
+
+            if (notified.has(key)) {
+                notified.delete(key);
                 changed = true;
+
+                /* Notifica recuperación únicamente cuando DTVSOL vuelve online. */
+                if (channel.source_state === 'online') {
+                    await showPersistentRecoveryNotification(channel);
+                }
             }
         }
 
@@ -849,6 +892,8 @@
                 `${data.inserted || 0} nuevos · ` +
                 `${data.updated || 0} actualizados`
             );
+
+            if (sourceAutoTimer) scheduleNextSourceCheck();
 
             if (manual) {
                 alert(
@@ -928,7 +973,13 @@
         const channel = channels.find(item => String(item.id) === String(id));
         if (!channel) return;
 
-        const fields = { source_review_status: 'confirmed' };
+        const now = new Date().toISOString();
+        const fields = {
+            source_review_status: 'confirmed',
+            incident_open: true,
+            incident_since: channel.incident_since || now,
+            incident_origin: channel.incident_origin || 'dtvsol'
+        };
 
         if (mode === 'image') fields.image = false;
         if (mode === 'sound') fields.sound = false;
@@ -944,7 +995,6 @@
         }
 
         Object.assign(channel, fields);
-        syncIncidentStart(channel);
         lastRenderedIds = '';
         renderChannels();
     }
@@ -1018,34 +1068,21 @@
         const now = Date.now();
 
         document.querySelectorAll('[data-timer-id]').forEach(element => {
-            const id = String(element.dataset.timerId);
-            const sourceStart = Number(element.dataset.sourceStart || 0);
-            const start = sourceStart > 0 ? sourceStart : incidentStart[id];
-
-            if (start) {
+            const start = Number(element.dataset.incidentStart || 0);
+            if (start > 0) {
                 element.textContent = formatDuration((now - start) / 1000);
             }
         });
     }
 
+    /*
+     * V7: el inicio de avería es GLOBAL y vive en Supabase (incident_since).
+     * Ya no se inicia/cierra con localStorage por navegador.
+     */
     function syncIncidentStart(channel) {
         const id = String(channel.id);
-
-        if (hasProblem(channel)) {
-            const stored = lsGetAll();
-
-            if (stored[id]) {
-                incidentStart[id] = Number(stored[id]);
-            } else {
-                const now = Date.now();
-
-                incidentStart[id] = now;
-                lsSetTimer(id, now);
-            }
-        } else {
-            delete incidentStart[id];
-            lsClearTimer(id);
-        }
+        delete incidentStart[id];
+        lsClearTimer(id);
     }
 
     // ==================== ESTADO DE CARGA ====================
@@ -1244,24 +1281,36 @@ ${error.message}`);
         if (channels.length === 0) return true;
 
         const ids = channels.map(channel => channel.id);
-
         const { error } = await sb
             .from('GPONTV')
-            .update({
-                image: true,
-                sound: true
-            })
+            .update({ image: true, sound: true })
             .in('id', ids);
 
         if (error) {
             console.error('Reset error:', error);
-
-            alert(
-                `No se pudieron reiniciar los canales:\n` +
-                `${error.message}`
-            );
-
+            alert(`No se pudieron reiniciar los canales:\n${error.message}`);
             return false;
+        }
+
+        const closableIds = channels
+            .filter(channel => !isSourceIncident(channel))
+            .map(channel => channel.id);
+
+        if (closableIds.length > 0) {
+            const { error: closeError } = await sb
+                .from('GPONTV')
+                .update({
+                    incident_open: false,
+                    incident_since: null,
+                    incident_origin: null,
+                    source_review_status: 'none'
+                })
+                .in('id', closableIds);
+
+            if (closeError) {
+                console.error('Reset close incident error:', closeError);
+                return false;
+            }
         }
 
         return true;
@@ -1290,6 +1339,12 @@ ${error.message}`);
             channels.forEach(channel => {
                 channel.image = true;
                 channel.sound = true;
+                if (!isSourceIncident(channel)) {
+                    channel.incident_open = false;
+                    channel.incident_since = null;
+                    channel.incident_origin = null;
+                    channel.source_review_status = 'none';
+                }
             });
 
             lsClearAllTimers();
@@ -1348,12 +1403,12 @@ ${error.message}`);
                 );
             }
 
-            const sourceStart = isSourceIncident(channel) && channel.source_outage_since
-                ? new Date(channel.source_outage_since).getTime()
+            const globalStartRaw = channel.incident_since
+                ? new Date(channel.incident_since).getTime()
                 : null;
-            const start = Number.isFinite(sourceStart)
-                ? sourceStart
-                : incidentStart[String(channel.id)];
+            const start = Number.isFinite(globalStartRaw)
+                ? globalStartRaw
+                : null;
             const duration = start
                 ? ` - ${formatDuration((Date.now() - start) / 1000)}`
                 : '';
@@ -1533,20 +1588,17 @@ ${error.message}`);
     }
 
     function buildTimerHTML(channel) {
-        if (!isIncident(channel)) return '';
+        if (!isIncident(channel) || !channel.incident_since) return '';
 
         const id = String(channel.id);
-        const sourceStartRaw = isSourceIncident(channel) && channel.source_outage_since
-            ? new Date(channel.source_outage_since).getTime()
-            : 0;
-        const sourceStart = Number.isFinite(sourceStartRaw) ? sourceStartRaw : 0;
-        const start = sourceStart > 0 ? sourceStart : incidentStart[id];
-        const seconds = start ? (Date.now() - start) / 1000 : 0;
+        const startRaw = new Date(channel.incident_since).getTime();
+        const start = Number.isFinite(startRaw) ? startRaw : 0;
+        const seconds = start > 0 ? (Date.now() - start) / 1000 : 0;
 
         return `
-            <span class="incident-timer">
+            <span class="incident-timer" title="Tiempo global de incidencia (DTVSOL/NOC)">
                 <span class="dot"></span>
-                <span data-timer-id="${escapeHTML(id)}" data-source-start="${sourceStart || ''}">
+                <span data-timer-id="${escapeHTML(id)}" data-incident-start="${start || ''}">
                     ${formatDuration(seconds)}
                 </span>
             </span>
@@ -1629,14 +1681,24 @@ ${error.message}`);
                             <span class="${sourceStateClass(channel)}">
                                 ${escapeHTML(sourceStateText(channel))}
                             </span>
-                            ${manualIssue ? `<span class="source-pill source-down">NOC: ${escapeHTML(manualIssue)}</span>` : ''}
                             ${stage}
-                            ${outage ? ` · incidencia ${escapeHTML(outage)}` : ''}
                         </div>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-6 shrink-0">
+                    ${channel.incident_open && !isSourceIncident(channel) && !manualProblem
+                        ? `<button class="source-pill source-degraded"
+                                   title="DTVSOL ya recuperó. Confirma NOC OK para cerrar la incidencia global."
+                                   onclick='confirmNocOk(${idArgument})'>
+                               NOC · VALIDAR OK
+                           </button>`
+                        : `<span class="source-pill ${manualProblem ? 'source-down' : 'source-online'}"
+                                 title="Validación manual NOC de imagen y audio">
+                               ${manualProblem ? `NOC · ${escapeHTML(manualIssue)}` : 'NOC OK'}
+                           </span>`}
+
+
                     <div class="flex items-center gap-2">
                         <span class="text-white font-medium text-xs">IMAGEN</span>
                         <span class="status-text ${channel.image ? 'text-yes' : 'text-no'}">
@@ -1928,50 +1990,86 @@ ${error.message}`);
         });
     }
 
-    function updateImage(id, value) {
-        const channel = channels.find(item => {
-            return (
-                String(item.id) ===
-                String(id)
-            );
-        });
-
+    async function updateNocState(id, field, value) {
+        const channel = channels.find(item => String(item.id) === String(id));
         if (!channel) return;
 
-        channel.image = Boolean(value);
+        const boolValue = Boolean(value);
+        const nextImage = field === 'image' ? boolValue : Boolean(channel.image);
+        const nextSound = field === 'sound' ? boolValue : Boolean(channel.sound);
+        const sourceAffected = isSourceIncident(channel);
+        const now = new Date().toISOString();
 
-        syncIncidentStart(channel);
+        const fields = { [field]: boolValue };
+
+        if (!nextImage || !nextSound) {
+            fields.incident_open = true;
+            fields.incident_since = channel.incident_since || now;
+            fields.incident_origin = channel.incident_origin || 'noc';
+            fields.source_review_status = 'confirmed';
+        } else if (sourceAffected) {
+            /* DTVSOL sigue afectado: NOC puede marcar audio/imagen OK, pero no cierra aún. */
+            fields.incident_open = true;
+            fields.incident_since = channel.incident_since || now;
+            fields.incident_origin = channel.incident_origin || 'dtvsol';
+            fields.source_review_status = 'confirmed';
+        } else {
+            /* DTVSOL ya está estable y NOC deja Imagen + Audio en OK: cierre global. */
+            fields.incident_open = false;
+            fields.incident_since = null;
+            fields.incident_origin = null;
+            fields.source_review_status = 'none';
+        }
+
+        const success = await updateChannelInDB(channel.id, fields);
+        if (!success) {
+            await loadChannels();
+            lastRenderedIds = '';
+            renderChannels();
+            alert('No se pudo guardar el estado NOC.');
+            return;
+        }
+
+        Object.assign(channel, fields);
+        lastRenderedIds = '';
         renderChannels();
+    }
 
-        debouncedUpdate(
-            channel.id,
-            {
-                image: Boolean(value)
-            }
-        );
+    function updateImage(id, value) {
+        updateNocState(id, 'image', value);
     }
 
     function updateSound(id, value) {
-        const channel = channels.find(item => {
-            return (
-                String(item.id) ===
-                String(id)
-            );
-        });
+        updateNocState(id, 'sound', value);
+    }
 
+    async function confirmNocOk(id) {
+        const channel = channels.find(item => String(item.id) === String(id));
         if (!channel) return;
 
-        channel.sound = Boolean(value);
+        if (isSourceIncident(channel)) {
+            alert('DTVSOL todavía reporta afectación. La incidencia no puede cerrarse aún.');
+            return;
+        }
 
-        syncIncidentStart(channel);
+        const fields = {
+            image: true,
+            sound: true,
+            incident_open: false,
+            incident_since: null,
+            incident_origin: null,
+            source_review_status: 'none'
+        };
+
+        const success = await updateChannelInDB(channel.id, fields);
+        if (!success) {
+            alert('No se pudo cerrar la incidencia.');
+            return;
+        }
+
+        Object.assign(channel, fields);
+        lastRenderedIds = '';
         renderChannels();
-
-        debouncedUpdate(
-            channel.id,
-            {
-                sound: Boolean(value)
-            }
-        );
     }
 
     // ==================== BUSCADOR ====================
@@ -2281,12 +2379,12 @@ ${error.message}`);
         ];
 
         channels.forEach(channel => {
-            const sourceStart = isSourceIncident(channel) && channel.source_outage_since
-                ? new Date(channel.source_outage_since).getTime()
+            const globalStartRaw = channel.incident_since
+                ? new Date(channel.incident_since).getTime()
                 : null;
-            const start = Number.isFinite(sourceStart)
-                ? sourceStart
-                : incidentStart[String(channel.id)];
+            const start = Number.isFinite(globalStartRaw)
+                ? globalStartRaw
+                : null;
 
             const incidentTime = start
                 ? formatDuration((Date.now() - start) / 1000)
@@ -2774,21 +2872,35 @@ ${error.message}`);
         return !last || (Date.now() - last) >= SOURCE_SYNC_INTERVAL_MS;
     }
 
-    function setupAutomaticSourceChecks() {
-        setInterval(
-            () => syncFromGponSource({ manual: false }),
-            SOURCE_SYNC_INTERVAL_MS
-        );
+    let sourceAutoTimer = null;
 
-        document.addEventListener('visibilitychange', () => {
+    function scheduleNextSourceCheck() {
+        if (sourceAutoTimer) clearTimeout(sourceAutoTimer);
+
+        const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
+        const elapsed = last ? Date.now() - last : SOURCE_SYNC_INTERVAL_MS;
+        const delay = Math.max(1000, SOURCE_SYNC_INTERVAL_MS - elapsed);
+
+        sourceAutoTimer = setTimeout(async () => {
+            await syncFromGponSource({ manual: false });
+            scheduleNextSourceCheck();
+        }, delay);
+    }
+
+    function setupAutomaticSourceChecks() {
+        scheduleNextSourceCheck();
+
+        document.addEventListener('visibilitychange', async () => {
             if (!document.hidden && sourceCheckIsDue()) {
-                syncFromGponSource({ manual: false });
+                await syncFromGponSource({ manual: false });
+                scheduleNextSourceCheck();
             }
         });
 
-        window.addEventListener('focus', () => {
+        window.addEventListener('focus', async () => {
             if (sourceCheckIsDue()) {
-                syncFromGponSource({ manual: false });
+                await syncFromGponSource({ manual: false });
+                scheduleNextSourceCheck();
             }
         });
     }
@@ -2846,23 +2958,38 @@ ${error.message}`);
 
             showLoading(true);
 
+            /*
+             * Carga primero la última información guardada en Supabase para que
+             * recargar la página sea inmediato. La consulta a DTVSOL corre luego
+             * en segundo plano solo si ya corresponde la revisión de 1 hora.
+             */
             await loadChannels();
-            await syncFromGponSource({ initial: true });
+
+            filterOnlyIncidents = channels.some(needsAttention);
+            updateFilterButton();
+            lastRenderedIds = '';
+            renderChannels();
+
+            const lastCheck = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
+            if (lastCheck) {
+                const lastText = new Date(lastCheck).toLocaleTimeString('es-PE', {
+                    hour: '2-digit', minute: '2-digit', second: '2-digit'
+                });
+                setSourceSyncStatus('online', `Última verificación DTVSOL ${lastText} · revisión automática cada 1 h`);
+            } else {
+                setSourceSyncStatus('idle', 'Datos guardados cargados · preparando primera verificación DTVSOL…');
+            }
 
             showLoading(false);
 
-            /*
-             * Si hay cualquier incidencia (caída, degradación o falla manual),
-             * la vista abre directamente filtrada para el NOC.
-             */
-            filterOnlyIncidents = channels.some(needsAttention);
-            updateFilterButton();
-
-            lastRenderedIds = '';
-            renderChannels();
             await getNotificationRegistration();
             processBrowserNotifications();
             updateNotificationButton();
+
+            /* No bloquea la carga visual. */
+            if (sourceCheckIsDue()) {
+                syncFromGponSource({ initial: true });
+            }
 
             setupRealtime();
             updateDateTime();
