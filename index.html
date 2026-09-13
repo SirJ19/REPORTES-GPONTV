@@ -667,16 +667,54 @@
             return true;
         } catch (error) {
             console.error('GPON source sync error:', error);
-            setSourceSyncStatus(
-                'error',
-                `No se pudo verificar GPON · ${error.message || error}`
-            );
+
+            let detail = error?.message || String(error);
+            let status = null;
+
+            // Supabase FunctionsHttpError conserva la respuesta HTTP en context.
+            // Intentamos leerla para mostrar el motivo REAL (401/404/500, secreto, migración, etc.).
+            try {
+                const response = error?.context;
+                if (response && typeof response.clone === 'function') {
+                    status = response.status || null;
+                    const copy = response.clone();
+                    const contentType = copy.headers?.get?.('content-type') || '';
+                    if (contentType.includes('application/json')) {
+                        const body = await copy.json();
+                        if (body?.error) detail = body.error;
+                        else if (body?.message) detail = body.message;
+                    } else {
+                        const text = await copy.text();
+                        if (text && text.length < 800) detail = text;
+                    }
+                }
+            } catch (readError) {
+                console.warn('No se pudo leer detalle de Edge Function:', readError);
+            }
+
+            let hint = '';
+            if (status === 401 || /jwt|unauthorized|authorization/i.test(detail)) {
+                hint = 'La función está exigiendo JWT. Desactiva Verify JWT para gpon-channel-sync (verify_jwt = false).';
+            } else if (status === 404 || /not found/i.test(detail)) {
+                hint = 'La Edge Function gpon-channel-sync no está desplegada con ese nombre.';
+            } else if (/GPON_ADMIN_CHANNELS_URL/i.test(detail)) {
+                hint = 'Falta configurar el Secret GPON_ADMIN_CHANNELS_URL con la URL completa y un token válido.';
+            } else if (/migraci|column|source_state|source_channel_id/i.test(detail)) {
+                hint = 'Falta ejecutar la migración SQL del monitor en Supabase.';
+            } else if (/No se encontraron canales|token pudo vencer/i.test(detail)) {
+                hint = 'La función sí llegó a GPON, pero el token venció o GPON devolvió una página distinta.';
+            } else if (/Failed to send a request|fetch/i.test(detail)) {
+                hint = 'El navegador no pudo alcanzar la Edge Function. Revisa que esté desplegada y accesible.';
+            }
+
+            const statusText = status ? `HTTP ${status} · ` : '';
+            setSourceSyncStatus('error', `GPON: ${statusText}${detail}`);
 
             if (manual) {
                 alert(
                     'No se pudo sincronizar con GPON.\n\n' +
-                    'Verifica que la Edge Function gpon-channel-sync esté desplegada ' +
-                    'y que el secreto GPON_ADMIN_CHANNELS_URL sea válido.'
+                    `${statusText}${detail}` +
+                    (hint ? `\n\nSOLUCIÓN: ${hint}` : '')
                 );
             }
 
