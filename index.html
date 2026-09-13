@@ -149,7 +149,8 @@
             background:#0a0a0a; border:1px solid #27272a; border-radius:24px;
             padding:12px 16px; margin-bottom:18px;
         }
-        .source-sync-meta { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .source-sync-meta { display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex:1; min-width:0; }
+        #source-sync-count { margin-left:auto; }
         .source-dot { width:9px; height:9px; border-radius:9999px; flex-shrink:0; }
         .source-dot.online { background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,.5); }
         .source-dot.syncing { background:#f59e0b; animation:blink 1s step-start infinite; }
@@ -220,14 +221,14 @@
                         <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
                     </div>
                 </div>
-                <div class="flex flex-col items-stretch gap-1.5">
+                <div class="flex items-center gap-2">
                     <button onclick="toggleForm()" id="toggle-form-btn"
-                            class="flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
+                            class="w-32 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
                         <span id="form-icon">▲</span>
                         <span id="form-text">Panel</span>
                     </button>
                     <button onclick="copyIncidentReport()" id="copy-report-btn"
-                            class="flex items-center justify-center gap-1.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-2xl text-xs font-medium text-slate-400">
+                            class="w-28 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
                         <span id="copy-btn-icon">📋</span>
                         <span id="copy-btn-text">COPIAR</span>
                     </button>
@@ -235,15 +236,11 @@
             </div>
         </div>
 
-        <!-- ALERTAS + BOTÓN TEMA -->
+        <!-- ALERTAS -->
         <button onclick="toggleBrowserNotifications()" id="notification-btn"
-                class="fixed top-6 right-20 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl"
+                class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl"
                 title="Activar o desactivar alertas persistentes" aria-label="Alertas">
             🔕
-        </button>
-        <button onclick="toggleTheme()" id="theme-toggle"
-                class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
-            🌙
         </button>
 
         <!-- SINCRONIZACIÓN AUTOMÁTICA CON DTVSOL -->
@@ -256,10 +253,10 @@
                 </div>
                 <button id="source-sync-count" type="button" onclick="openSourceInventory()"
                         class="source-pill source-unknown cursor-pointer"
-                        title="Ver activos, inactivos e incidencias detectadas por DTVSOL">SIN DATOS</button>
+                        title="Ver activos, inactivos, incidencias DTVSOL e incidencias NOC">SIN DATOS</button>
             </div>
             <div class="flex items-center gap-2">
-                <span class="source-pill source-online" title="La página verifica DTVSOL al abrir y luego cada hora">AUTO · 1 H</span>
+                <span class="source-pill source-online" title="La página verifica DTVSOL al abrir y luego cada 10 minutos">AUTO · 10 MIN</span>
                 <button id="sync-now-btn" onclick="syncFromGponSource({ manual: true })"
                         class="text-xs px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-2xl">
                     ↻ VERIFICAR AHORA
@@ -277,11 +274,15 @@
                     </div>
                     <button type="button" onclick="closeSourceInventory()" class="text-2xl text-slate-400 hover:text-white">✕</button>
                 </div>
-                <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-5 gap-3 p-6"></div>
+                <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-6 gap-3 p-6"></div>
                 <div class="px-6 pb-6 space-y-3 max-h-[62vh] overflow-y-auto">
                     <details open class="border border-red-900/60 rounded-2xl bg-red-950/10">
                         <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias DTVSOL <span id="source-incidents-title"></span></summary>
                         <div id="source-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
+                    </details>
+                    <details open class="border border-orange-900/60 rounded-2xl bg-orange-950/10">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-orange-300">Incidencias NOC <span id="noc-incidents-title"></span></summary>
+                        <div id="noc-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
                     </details>
                     <details class="border border-zinc-700 rounded-2xl">
                         <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en DTVSOL <span id="source-active-title"></span></summary>
@@ -407,7 +408,7 @@
 
     // ==================== FUENTE GPON / ALERTAS ====================
     const SOURCE_SYNC_FUNCTION = 'swift-api';
-    const SOURCE_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hora
+    const SOURCE_SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutos
     const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v2';
     const ALERTS_ENABLED_KEY = 'gpontv_alerts_enabled_v1';
     const LAST_SOURCE_CHECK_KEY = 'gpontv_last_dtvsol_check_v1';
@@ -504,12 +505,12 @@
 
         /* El texto es neutro; el color indica estado DTVSOL. */
         const labels = {
-            online: `DTVSOL${availability}`,
-            down: `DTVSOL${availability}`,
-            degraded: `DTVSOL${availability}`,
-            disabled: 'DTVSOL OFF',
-            missing: 'DTVSOL ?',
-            unknown: 'DTVSOL ?'
+            online: `PROXIES${availability}`,
+            down: `PROXIES${availability}`,
+            degraded: `PROXIES${availability}`,
+            disabled: 'PROXIES OFF',
+            missing: 'PROXIES ?',
+            unknown: 'PROXIES ?'
         };
 
         return labels[channel.source_state] || labels.unknown;
@@ -550,6 +551,7 @@
         });
 
         const incidents = active.filter(isSourceIncident);
+        const nocIncidents = channels.filter(hasManualProblem);
         const online = active.filter(channel => channel.source_state === 'online');
 
         return {
@@ -557,6 +559,7 @@
             active,
             disabled,
             incidents,
+            nocIncidents,
             online,
             monitorTotal: channels.length
         };
@@ -573,7 +576,7 @@
         if (count && (sourceLastResult?.ok || channels.some(channel => channel.source_channel_id !== null && channel.source_channel_id !== undefined))) {
             const stats = sourceInventoryStats();
             const total = sourceLastResult?.fetched ?? stats.synced.length;
-            count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS`;
+            count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS · ${stats.nocIncidents.length} INC. NOC`;
             count.className = 'source-pill source-online cursor-pointer';
         } else if (count && status === 'error') {
             count.textContent = 'SIN SINCRONIZAR';
@@ -624,7 +627,8 @@
                 ['DTVSOL', total, 'text-white'],
                 ['ACTIVOS', stats.active.length, 'text-green-400'],
                 ['INACTIVOS', stats.disabled.length, 'text-zinc-400'],
-                ['INCIDENCIAS', stats.incidents.length, 'text-red-400'],
+                ['INC. DTVSOL', stats.incidents.length, 'text-red-400'],
+                ['INC. NOC', stats.nocIncidents.length, 'text-orange-400'],
                 ['EN MONITOR', stats.monitorTotal, 'text-orange-400']
             ];
 
@@ -638,14 +642,33 @@
 
         setText('source-inventory-subtitle', `Última sincronización: ${checkedAt}`);
         setText('source-incidents-title', `(${stats.incidents.length})`);
+        setText('noc-incidents-title', `(${stats.nocIncidents.length})`);
         setText('source-active-title', `(${stats.active.length})`);
         setText('source-disabled-title', `(${stats.disabled.length})`);
 
         const incidentList = document.getElementById('source-incidents-list');
+        const nocIncidentList = document.getElementById('noc-incidents-list');
         const activeList = document.getElementById('source-active-list');
         const disabledList = document.getElementById('source-disabled-list');
 
         if (incidentList) incidentList.innerHTML = sourceListHTML(stats.incidents, true);
+
+        if (nocIncidentList) {
+            nocIncidentList.innerHTML = stats.nocIncidents.length
+                ? stats.nocIncidents
+                    .slice()
+                    .sort((a, b) => String(a.number).localeCompare(String(b.number), 'es', { numeric: true }))
+                    .map(channel =>
+                        `<div class="rounded-xl border border-zinc-800 px-3 py-2">` +
+                        `<span class="font-mono text-orange-400">${escapeHTML(channel.number)}</span> · ` +
+                        `<span>${escapeHTML(channel.name)}</span>` +
+                        `<span class="text-xs text-slate-500"> · ${escapeHTML(manualIssueText(channel))}</span>` +
+                        `</div>`
+                    )
+                    .join('')
+                : '<div class="text-slate-500 col-span-full">Ninguno.</div>';
+        }
+
         if (activeList) activeList.innerHTML = sourceListHTML(stats.active, false);
         if (disabledList) disabledList.innerHTML = sourceListHTML(stats.disabled, false);
 
@@ -888,9 +911,7 @@
 
             setSourceSyncStatus(
                 'online',
-                `Sincronizado ${time} · ` +
-                `${data.inserted || 0} nuevos · ` +
-                `${data.updated || 0} actualizados`
+                `Última verificación DTVSOL ${time}`
             );
 
             if (sourceAutoTimer) scheduleNextSourceCheck();
@@ -1360,7 +1381,10 @@ ${error.message}`);
 
     // ==================== COPIAR REPORTE ====================
     function copyIncidentReport() {
-        const problemChannels = channels.filter(isIncident);
+        // El reporte COPIAR conserva el formato NOC original:
+        // solo refleja validación manual de IMAGEN/AUDIO.
+        // DTVSOL NO se agrega al texto del reporte.
+        const problemChannels = channels.filter(channel => !channel.image || !channel.sound);
 
         if (problemChannels.length === 0) {
             alert('No hay incidencias activas para reportar.');
@@ -1389,20 +1413,6 @@ ${error.message}`);
             if (!channel.image) issues.push('Sin Imagen');
             if (!channel.sound) issues.push('Sin Audio');
 
-            if (isSourceIncident(channel)) {
-                const availability =
-                    channel.source_proxies_online !== null &&
-                    channel.source_proxies_total !== null
-                        ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                        : 'sin disponibilidad';
-
-                issues.push(
-                    channel.source_state === 'down'
-                        ? `Caída DTVSOL ${availability}`
-                        : `Degradación DTVSOL ${availability}`
-                );
-            }
-
             const globalStartRaw = channel.incident_since
                 ? new Date(channel.incident_since).getTime()
                 : null;
@@ -1428,12 +1438,12 @@ ${error.message}`);
 
             if (icon) icon.textContent = '✅';
             if (text) text.textContent = 'COPIADO';
-            if (button) button.classList.add('border-green-500', 'text-green-400');
+            if (button) button.classList.add('border-orange-500', 'text-orange-400', 'bg-orange-500/10');
 
             setTimeout(() => {
                 if (icon) icon.textContent = '📋';
                 if (text) text.textContent = 'COPIAR';
-                if (button) button.classList.remove('border-green-500', 'text-green-400');
+                if (button) button.classList.remove('border-orange-500', 'text-orange-400', 'bg-orange-500/10');
             }, 1500);
         };
 
@@ -1689,15 +1699,11 @@ ${error.message}`);
                 <div class="flex items-center gap-6 shrink-0">
                     ${channel.incident_open && !isSourceIncident(channel) && !manualProblem
                         ? `<button class="source-pill source-degraded"
-                                   title="DTVSOL ya recuperó. Confirma NOC OK para cerrar la incidencia global."
+                                   title="DTVSOL ya recuperó. Confirma para cerrar la incidencia global."
                                    onclick='confirmNocOk(${idArgument})'>
-                               NOC: VALIDAR
+                               ✓ VALIDAR OK
                            </button>`
-                        : `<span class="source-pill ${manualProblem ? 'source-down' : 'source-online'}"
-                                 title="Validación manual NOC de imagen y audio">
-                               NOC:
-                           </span>`}
-
+                        : ''}
 
                     <div class="flex items-center gap-2">
                         <span class="text-white font-medium text-xs">IMAGEN</span>
@@ -2207,38 +2213,6 @@ ${error.message}`);
 
         lastRenderedIds = '';
         renderChannels();
-    }
-
-    function updateThemeButton() {
-        const button =
-            document.getElementById(
-                'theme-toggle'
-            );
-
-        if (button) {
-            button.textContent =
-                isDarkMode
-                    ? '☀️'
-                    : '🌙';
-        }
-    }
-
-    function toggleTheme() {
-        isDarkMode = !isDarkMode;
-
-        document.body.classList.toggle(
-            'light',
-            !isDarkMode
-        );
-
-        updateThemeButton();
-
-        localStorage.setItem(
-            'theme',
-            isDarkMode
-                ? 'dark'
-                : 'light'
-        );
     }
 
     // ==================== CSV ====================
@@ -2909,20 +2883,10 @@ ${error.message}`);
     window.addEventListener(
         'load',
         async () => {
-            const savedTheme =
-                localStorage.getItem(
-                    'theme'
-                );
-
-            isDarkMode =
-                savedTheme !== 'light';
-
-            document.body.classList.toggle(
-                'light',
-                !isDarkMode
-            );
-
-            updateThemeButton();
+            // Tema oscuro obligatorio.
+            isDarkMode = true;
+            document.body.classList.remove('light');
+            localStorage.setItem('theme', 'dark');
 
             const savedForm =
                 localStorage.getItem(
@@ -2961,7 +2925,7 @@ ${error.message}`);
             /*
              * Carga primero la última información guardada en Supabase para que
              * recargar la página sea inmediato. La consulta a DTVSOL corre luego
-             * en segundo plano solo si ya corresponde la revisión de 1 hora.
+             * en segundo plano solo si ya corresponde la revisión de 10 minutos.
              */
             await loadChannels();
 
@@ -2975,7 +2939,7 @@ ${error.message}`);
                 const lastText = new Date(lastCheck).toLocaleTimeString('es-PE', {
                     hour: '2-digit', minute: '2-digit', second: '2-digit'
                 });
-                setSourceSyncStatus('online', `Última verificación DTVSOL ${lastText} · revisión automática cada 1 h`);
+                setSourceSyncStatus('online', `Última verificación DTVSOL ${lastText}`);
             } else {
                 setSourceSyncStatus('idle', 'Datos guardados cargados · preparando primera verificación DTVSOL…');
             }
