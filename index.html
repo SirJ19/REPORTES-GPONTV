@@ -219,10 +219,6 @@
                         <div class="text-xs text-slate-400">INCIDENCIAS</div>
                         <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-xs text-slate-400">ADVERTENCIAS</div>
-                        <div id="warnings-count" class="text-4xl font-semibold text-amber-400">0</div>
-                    </div>
                 </div>
                 <div class="flex flex-col items-stretch gap-1.5">
                     <button onclick="toggleForm()" id="toggle-form-btn"
@@ -253,7 +249,9 @@
                     <div class="text-sm font-semibold text-white">FUENTE GPON</div>
                     <div id="source-sync-label" class="text-xs text-slate-400">Esperando primera verificación…</div>
                 </div>
-                <span id="source-sync-count" class="source-pill source-unknown">SIN DATOS</span>
+                <button id="source-sync-count" type="button" onclick="openSourceInventory()"
+                        class="source-pill source-unknown cursor-pointer"
+                        title="Ver activos, inactivos e incidencias detectadas por GPON">SIN DATOS</button>
             </div>
             <div class="flex items-center gap-2">
                 <button id="notification-btn" onclick="enableBrowserNotifications()"
@@ -264,6 +262,34 @@
                         class="text-xs px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-2xl">
                     ↻ VERIFICAR GPON
                 </button>
+            </div>
+        </div>
+
+        <!-- INVENTARIO DE LA FUENTE GPON -->
+        <div id="source-inventory-modal" class="hidden fixed inset-0 z-[10000] bg-black/75 backdrop-blur-sm p-4" onclick="closeSourceInventory(event)">
+            <div class="max-w-4xl mx-auto mt-10 bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
+                    <div>
+                        <h3 class="text-xl font-semibold text-white">Inventario GPON</h3>
+                        <p id="source-inventory-subtitle" class="text-xs text-slate-400 mt-1">Resumen de la última sincronización</p>
+                    </div>
+                    <button type="button" onclick="closeSourceInventory()" class="text-2xl text-slate-400 hover:text-white">✕</button>
+                </div>
+                <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-5 gap-3 p-6"></div>
+                <div class="px-6 pb-6 space-y-3 max-h-[62vh] overflow-y-auto">
+                    <details open class="border border-red-900/60 rounded-2xl bg-red-950/10">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias GPON <span id="source-incidents-title"></span></summary>
+                        <div id="source-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
+                    </details>
+                    <details class="border border-zinc-700 rounded-2xl">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en GPON <span id="source-active-title"></span></summary>
+                        <div id="source-active-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
+                    </details>
+                    <details open class="border border-zinc-700 rounded-2xl bg-zinc-900/30">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en GPON <span id="source-disabled-title"></span></summary>
+                        <div id="source-disabled-list" class="px-4 pb-4 text-sm text-slate-400 grid md:grid-cols-2 gap-2"></div>
+                    </details>
+                </div>
             </div>
         </div>
 
@@ -314,7 +340,7 @@
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
                     <span id="filter-icon">🔴</span>
-                    <span id="filter-text">FILTRAR ALERTAS</span>
+                    <span id="filter-text">FILTRAR INCIDENCIAS</span>
                 </button>
                 <button onclick="resetAllStates()"
                         class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
@@ -437,19 +463,24 @@
         return channel.source_state === 'down';
     }
 
-    function isSourceWarning(channel) {
-        return (
-            channel.source_state === 'degraded' ||
-            channel.source_state === 'missing'
-        );
+    function isSourceDegraded(channel) {
+        return channel.source_state === 'degraded';
+    }
+
+    function isSourceIncident(channel) {
+        return isSourceCritical(channel) || isSourceDegraded(channel);
+    }
+
+    function isSourceMissing(channel) {
+        return channel.source_state === 'missing';
+    }
+
+    function isIncident(channel) {
+        return hasManualProblem(channel) || isSourceIncident(channel);
     }
 
     function needsAttention(channel) {
-        return (
-            hasManualProblem(channel) ||
-            isSourceCritical(channel) ||
-            isSourceWarning(channel)
-        );
+        return isIncident(channel);
     }
 
     function sourceStateText(channel) {
@@ -463,7 +494,7 @@
         const labels = {
             online: `GPON OK${availability}`,
             down: `CAÍDO GPON${availability}`,
-            degraded: `DEGRADADO${availability}`,
+            degraded: `INCIDENCIA GPON${availability}`,
             disabled: 'DESACTIVADO EN GPON',
             missing: 'NO ENCONTRADO EN GPON',
             unknown: 'SIN DATOS GPON'
@@ -484,6 +515,34 @@
         return formatDuration((Date.now() - start) / 1000);
     }
 
+    function sourceInventoryStats() {
+        const synced = channels.filter(channel => {
+            return channel.source_channel_id !== null &&
+                channel.source_channel_id !== undefined &&
+                channel.source_state !== 'missing';
+        });
+
+        const disabled = synced.filter(channel => {
+            return channel.source_run === false || channel.source_state === 'disabled';
+        });
+
+        const active = synced.filter(channel => {
+            return channel.source_run === true && channel.source_state !== 'disabled';
+        });
+
+        const incidents = active.filter(isSourceIncident);
+        const online = active.filter(channel => channel.source_state === 'online');
+
+        return {
+            synced,
+            active,
+            disabled,
+            incidents,
+            online,
+            monitorTotal: channels.length
+        };
+    }
+
     function setSourceSyncStatus(status, details = '') {
         const dot = document.getElementById('source-sync-dot');
         const label = document.getElementById('source-sync-label');
@@ -493,13 +552,93 @@
         if (label) label.textContent = details;
 
         if (count && sourceLastResult?.ok) {
-            const total = sourceLastResult.fetched ?? channels.length;
-            count.textContent = `${total} CANALES EN GPON`;
-            count.className = 'source-pill source-online';
+            const stats = sourceInventoryStats();
+            const total = sourceLastResult.fetched ?? stats.synced.length;
+            count.textContent = `${total} GPON · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS`;
+            count.className = 'source-pill source-online cursor-pointer';
         } else if (count && status === 'error') {
             count.textContent = 'SIN SINCRONIZAR';
-            count.className = 'source-pill source-down';
+            count.className = 'source-pill source-down cursor-pointer';
         }
+    }
+
+    function sourceListHTML(list, includeState = false) {
+        if (!list.length) {
+            return '<div class="text-slate-500 col-span-full">Ninguno.</div>';
+        }
+
+        return list
+            .slice()
+            .sort((a, b) => String(a.number).localeCompare(String(b.number), 'es', { numeric: true }))
+            .map(channel => {
+                const availability =
+                    channel.source_proxies_online !== null &&
+                    channel.source_proxies_total !== null
+                        ? ` · ${channel.source_proxies_online}/${channel.source_proxies_total}`
+                        : '';
+                const state = includeState
+                    ? ` · ${channel.source_state === 'down' ? 'CAÍDO' : 'DEGRADADO'}${availability}`
+                    : '';
+
+                return `<div class="rounded-xl border border-zinc-800 px-3 py-2">` +
+                    `<span class="font-mono text-orange-400">${escapeHTML(channel.number)}</span> · ` +
+                    `<span>${escapeHTML(channel.name)}</span>` +
+                    `<span class="text-xs text-slate-500">${escapeHTML(state)}</span>` +
+                    `</div>`;
+            })
+            .join('');
+    }
+
+    function openSourceInventory() {
+        const modal = document.getElementById('source-inventory-modal');
+        if (!modal) return;
+
+        const stats = sourceInventoryStats();
+        const total = sourceLastResult?.fetched ?? stats.synced.length;
+        const summary = document.getElementById('source-inventory-summary');
+        const checkedAt = sourceLastResult?.checkedAt
+            ? new Date(sourceLastResult.checkedAt).toLocaleString('es-PE')
+            : 'sin fecha';
+
+        if (summary) {
+            const cards = [
+                ['GPON', total, 'text-white'],
+                ['ACTIVOS', stats.active.length, 'text-green-400'],
+                ['INACTIVOS', stats.disabled.length, 'text-zinc-400'],
+                ['INCIDENCIAS', stats.incidents.length, 'text-red-400'],
+                ['EN MONITOR', stats.monitorTotal, 'text-orange-400']
+            ];
+
+            summary.innerHTML = cards.map(([label, value, cls]) => `
+                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
+                    <div class="text-[11px] text-slate-500">${label}</div>
+                    <div class="text-2xl font-bold ${cls}">${value}</div>
+                </div>
+            `).join('');
+        }
+
+        setText('source-inventory-subtitle', `Última sincronización: ${checkedAt}`);
+        setText('source-incidents-title', `(${stats.incidents.length})`);
+        setText('source-active-title', `(${stats.active.length})`);
+        setText('source-disabled-title', `(${stats.disabled.length})`);
+
+        const incidentList = document.getElementById('source-incidents-list');
+        const activeList = document.getElementById('source-active-list');
+        const disabledList = document.getElementById('source-disabled-list');
+
+        if (incidentList) incidentList.innerHTML = sourceListHTML(stats.incidents, true);
+        if (activeList) activeList.innerHTML = sourceListHTML(stats.active, false);
+        if (disabledList) disabledList.innerHTML = sourceListHTML(stats.disabled, false);
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeSourceInventory(event) {
+        if (event && event.target?.id !== 'source-inventory-modal') return;
+        const modal = document.getElementById('source-inventory-modal');
+        if (modal) modal.classList.add('hidden');
+        document.body.style.overflow = '';
     }
 
     function notificationSet() {
@@ -567,11 +706,9 @@
         let changed = false;
 
         channels.forEach(channel => {
-            const key = String(
-                channel.source_channel_id ?? channel.id
-            );
+            const key = String(channel.source_channel_id ?? channel.id);
 
-            if (channel.source_state === 'down') {
+            if (isSourceIncident(channel)) {
                 if (!notified.has(key)) {
                     notified.add(key);
                     changed = true;
@@ -585,12 +722,16 @@
                             channel.source_proxies_total !== null
                                 ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
                                 : 'sin disponibilidad';
+                        const impact = channel.source_state === 'down'
+                            ? 'CAÍDO'
+                            : 'DEGRADADO';
 
-                        new Notification('🚨 GPON TV · CANAL CAÍDO', {
+                        new Notification('🚨 GPON TV · INCIDENCIA', {
                             body:
-                                `Canal ${channel.number} · ${channel.name}\n` +
-                                `Disponibilidad: ${availability}`,
-                            tag: `gpontv-down-${key}`,
+                                `Canal ${channel.number} · ${channel.name}
+` +
+                                `${impact} · Disponibilidad: ${availability}`,
+                            tag: `gpontv-incident-${key}`,
                             renotify: false
                         });
                     }
@@ -663,8 +804,9 @@
                     `Canales en origen: ${data.fetched}\n` +
                     `Nuevos agregados: ${data.inserted || 0}\n` +
                     `Actualizados: ${data.updated || 0}\n` +
-                    `Caídos: ${data.states?.down || 0}\n` +
-                    `Advertencias: ${(data.states?.degraded || 0) + (data.states?.missing || 0)}\n` +
+                    `Incidencias GPON: ${(data.states?.down || 0) + (data.states?.degraded || 0)}\n` +
+                    `  • Caídos: ${data.states?.down || 0}\n` +
+                    `  • Degradados: ${data.states?.degraded || 0}\n` +
                     `Desactivados: ${data.states?.disabled || 0}`
                 );
             }
@@ -742,7 +884,6 @@
             fields.image = false;
             fields.sound = false;
         }
-        if (mode === 'warning') fields.source_review_status = 'ignored';
 
         const success = await updateChannelInDB(channel.id, fields);
         if (!success) {
@@ -826,12 +967,11 @@
 
         document.querySelectorAll('[data-timer-id]').forEach(element => {
             const id = String(element.dataset.timerId);
-            const start = incidentStart[id];
+            const sourceStart = Number(element.dataset.sourceStart || 0);
+            const start = sourceStart > 0 ? sourceStart : incidentStart[id];
 
             if (start) {
-                element.textContent = formatDuration(
-                    (now - start) / 1000
-                );
+                element.textContent = formatDuration((now - start) / 1000);
             }
         });
     }
@@ -1113,34 +1253,20 @@ ${error.message}`);
 
     // ==================== COPIAR REPORTE ====================
     function copyIncidentReport() {
-        const problemChannels = channels.filter(
-            channel => hasProblem(channel)
-        );
+        const problemChannels = channels.filter(isIncident);
 
         if (problemChannels.length === 0) {
-            alert(
-                'No hay incidencias activas para reportar.'
-            );
-
+            alert('No hay incidencias activas para reportar.');
             return;
         }
 
         const now = new Date(
-            new Date().toLocaleString('en-US', {
-                timeZone: 'America/Lima'
-            })
+            new Date().toLocaleString('en-US', { timeZone: 'America/Lima' })
         );
-
-        const pad = value => {
-            return String(value).padStart(2, '0');
-        };
-
+        const pad = value => String(value).padStart(2, '0');
         const dateStr =
-            `${pad(now.getDate())}/` +
-            `${pad(now.getMonth() + 1)}/` +
-            `${now.getFullYear()} ` +
-            `${pad(now.getHours())}:` +
-            `${pad(now.getMinutes())}`;
+            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ` +
+            `${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
         const lines = [
             '🚨 REPORTE DE CANALES CON INCIDENCIAS 🚨',
@@ -1153,26 +1279,35 @@ ${error.message}`);
         problemChannels.forEach(channel => {
             const issues = [];
 
-            if (!channel.image) {
-                issues.push('Sin Imagen');
+            if (!channel.image) issues.push('Sin Imagen');
+            if (!channel.sound) issues.push('Sin Audio');
+
+            if (isSourceIncident(channel)) {
+                const availability =
+                    channel.source_proxies_online !== null &&
+                    channel.source_proxies_total !== null
+                        ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
+                        : 'sin disponibilidad';
+
+                issues.push(
+                    channel.source_state === 'down'
+                        ? `Caída GPON ${availability}`
+                        : `Degradación GPON ${availability}`
+                );
             }
 
-            if (!channel.sound) {
-                issues.push('Sin Audio');
-            }
-
-            const start =
-                incidentStart[String(channel.id)];
-
+            const sourceStart = isSourceIncident(channel) && channel.source_outage_since
+                ? new Date(channel.source_outage_since).getTime()
+                : null;
+            const start = Number.isFinite(sourceStart)
+                ? sourceStart
+                : incidentStart[String(channel.id)];
             const duration = start
-                ? ` - ${formatDuration(
-                    (Date.now() - start) / 1000
-                )}`
+                ? ` - ${formatDuration((Date.now() - start) / 1000)}`
                 : '';
 
             lines.push(
-                `CANAL ${channel.number} – ` +
-                `${String(channel.name).toUpperCase()} ` +
+                `CANAL ${channel.number} – ${String(channel.name).toUpperCase()} ` +
                 `(${issues.join(', ')})${duration}`
             );
         });
@@ -1180,66 +1315,27 @@ ${error.message}`);
         const report = lines.join('\n');
 
         const markAsCopied = () => {
-            const button =
-                document.getElementById('copy-report-btn');
+            const button = document.getElementById('copy-report-btn');
+            const icon = document.getElementById('copy-btn-icon');
+            const text = document.getElementById('copy-btn-text');
 
-            const icon =
-                document.getElementById('copy-btn-icon');
-
-            const text =
-                document.getElementById('copy-btn-text');
-
-            if (icon) {
-                icon.textContent = '✅';
-            }
-
-            if (text) {
-                text.textContent = 'COPIADO';
-            }
-
-            if (button) {
-                button.classList.add(
-                    'border-green-500',
-                    'text-green-400'
-                );
-            }
+            if (icon) icon.textContent = '✅';
+            if (text) text.textContent = 'COPIADO';
+            if (button) button.classList.add('border-green-500', 'text-green-400');
 
             setTimeout(() => {
-                if (icon) {
-                    icon.textContent = '📋';
-                }
-
-                if (text) {
-                    text.textContent = 'COPIAR';
-                }
-
-                if (button) {
-                    button.classList.remove(
-                        'border-green-500',
-                        'text-green-400'
-                    );
-                }
+                if (icon) icon.textContent = '📋';
+                if (text) text.textContent = 'COPIAR';
+                if (button) button.classList.remove('border-green-500', 'text-green-400');
             }, 1500);
         };
 
-        if (
-            navigator.clipboard &&
-            window.isSecureContext
-        ) {
-            navigator.clipboard
-                .writeText(report)
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(report)
                 .then(markAsCopied)
-                .catch(() => {
-                    fallbackCopy(
-                        report,
-                        markAsCopied
-                    );
-                });
+                .catch(() => fallbackCopy(report, markAsCopied));
         } else {
-            fallbackCopy(
-                report,
-                markAsCopied
-            );
+            fallbackCopy(report, markAsCopied);
         }
     }
 
@@ -1283,50 +1379,34 @@ ${error.message}`);
         if (!container || !empty) return;
 
         let displayed = filterOnlyIncidents
-            ? channels.filter(channel => needsAttention(channel))
+            ? channels.filter(isIncident)
             : [...channels];
 
         if (searchQuery) {
             displayed = displayed.filter(channel => {
                 const number = String(channel.number).toLowerCase();
                 const name = String(channel.name).toLowerCase();
-                return (
-                    number.includes(searchQuery) ||
-                    name.includes(searchQuery)
-                );
+                return number.includes(searchQuery) || name.includes(searchQuery);
             });
         }
 
-        const incidentCount = channels.filter(hasManualProblem).length;
-        const warningCount = channels.filter(channel => {
-            return (
-                (isSourceCritical(channel) || isSourceWarning(channel)) &&
-                !hasManualProblem(channel)
-            );
-        }).length;
+        const incidentCount = channels.filter(isIncident).length;
 
         setText('total-channels', channels.length);
         setText('incidents-count', incidentCount);
-        setText('warnings-count', warningCount);
-        setText(
-            'footer-text',
-            `${incidentCount} incidencias · ${warningCount} advertencias`
-        );
+        setText('footer-text', `${incidentCount} incidencias`);
 
         const footerDot = document.getElementById('footer-dot');
         if (footerDot) {
-            footerDot.className =
-                incidentCount > 0
-                    ? 'w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse'
-                    : warningCount > 0
-                        ? 'w-3.5 h-3.5 bg-amber-400 rounded-full animate-pulse'
-                        : 'w-3.5 h-3.5 bg-orange-500 rounded-full';
+            footerDot.className = incidentCount > 0
+                ? 'w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse'
+                : 'w-3.5 h-3.5 bg-orange-500 rounded-full';
         }
 
         setText(
             'view-title',
             filterOnlyIncidents
-                ? `Canales que requieren atención (${displayed.length})`
+                ? `Canales con incidencias (${displayed.length})`
                 : `Todos los canales (${channels.length})`
         );
 
@@ -1339,7 +1419,7 @@ ${error.message}`);
                 searchQuery
                     ? 'No se encontraron canales'
                     : filterOnlyIncidents
-                        ? 'Sin incidencias ni advertencias'
+                        ? 'Sin incidencias activas'
                         : 'No hay canales aún'
             );
 
@@ -1359,28 +1439,24 @@ ${error.message}`);
         empty.classList.add('hidden');
 
         const idFingerprint = displayed
-            .map(channel => {
-                return [
-                    channel.id,
-                    channel.number,
-                    channel.name,
-                    channel.image,
-                    channel.sound,
-                    channel.source_state,
-                    channel.source_proxies_online,
-                    channel.source_proxies_total,
-                    channel.source_review_status,
-                    channel.source_outage_since
-                ].join(':');
-            })
+            .map(channel => [
+                channel.id,
+                channel.number,
+                channel.name,
+                channel.image,
+                channel.sound,
+                channel.source_state,
+                channel.source_proxies_online,
+                channel.source_proxies_total,
+                channel.source_review_status,
+                channel.source_outage_since
+            ].join(':'))
             .join('|');
 
         if (idFingerprint !== lastRenderedIds) {
             lastRenderedIds = idFingerprint;
             container.innerHTML = '';
-            displayed.forEach(channel => {
-                container.appendChild(buildCard(channel));
-            });
+            displayed.forEach(channel => container.appendChild(buildCard(channel)));
         }
     }
 
@@ -1405,20 +1481,20 @@ ${error.message}`);
     }
 
     function buildTimerHTML(channel) {
-        if (!hasProblem(channel)) return '';
+        if (!isIncident(channel)) return '';
 
         const id = String(channel.id);
-        const start = incidentStart[id];
-
-        const seconds = start
-            ? (Date.now() - start) / 1000
+        const sourceStartRaw = isSourceIncident(channel) && channel.source_outage_since
+            ? new Date(channel.source_outage_since).getTime()
             : 0;
+        const sourceStart = Number.isFinite(sourceStartRaw) ? sourceStartRaw : 0;
+        const start = sourceStart > 0 ? sourceStart : incidentStart[id];
+        const seconds = start ? (Date.now() - start) / 1000 : 0;
 
         return `
             <span class="incident-timer">
                 <span class="dot"></span>
-
-                <span data-timer-id="${escapeHTML(id)}">
+                <span data-timer-id="${escapeHTML(id)}" data-source-start="${sourceStart || ''}">
                     ${formatDuration(seconds)}
                 </span>
             </span>
@@ -1428,23 +1504,21 @@ ${error.message}`);
     function buildCard(channel) {
         const manualProblem = hasManualProblem(channel);
         const sourceCritical = isSourceCritical(channel);
-        const sourceWarning = isSourceWarning(channel);
+        const sourceDegraded = isSourceDegraded(channel);
+        const sourceMissing = isSourceMissing(channel);
         const sourceDisabled = channel.source_state === 'disabled';
-        const attention = needsAttention(channel);
+        const incident = isIncident(channel);
         const idArgument = JSON.stringify(channel.id);
 
         let badgeClass = 'status-ok';
         let badgeText = 'ESTABLE';
 
-        if (manualProblem) {
+        if (incident) {
             badgeClass = 'status-problem';
             badgeText = 'INCIDENCIA';
-        } else if (sourceCritical) {
-            badgeClass = 'status-pending';
-            badgeText = 'POR VERIFICAR';
-        } else if (sourceWarning) {
+        } else if (sourceMissing) {
             badgeClass = 'status-warning';
-            badgeText = 'ADVERTENCIA';
+            badgeText = 'NO EN GPON';
         } else if (sourceDisabled) {
             badgeClass = 'status-disabled';
             badgeText = 'DESACTIVADO';
@@ -1456,22 +1530,20 @@ ${error.message}`);
             : '';
 
         const reviewPending =
-            (sourceCritical || sourceWarning) &&
-            channel.source_review_status === 'pending' &&
+            (sourceCritical || sourceDegraded) &&
             !manualProblem;
 
         const reviewHtml = reviewPending
             ? `
-                <div class="review-box ${sourceCritical ? 'review-critical' : ''}">
-                    <span class="text-xs font-semibold ${sourceCritical ? 'text-red-300' : 'text-amber-300'}">
+                <div class="review-box review-critical">
+                    <span class="text-xs font-semibold text-red-300">
                         ${sourceCritical
-                            ? '⚠ GPON detecta caída. Confirma qué está afectado:'
-                            : '⚠ GPON detecta degradación. Revisa antes de reportar:'}
+                            ? '🚨 GPON detecta corte. Ya cuenta como incidencia. Opcional: indica qué está afectado:'
+                            : '🚨 GPON detecta degradación. Ya cuenta como incidencia. Opcional: indica qué está afectado:'}
                     </span>
                     <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "image")'>SIN IMAGEN</button>
                     <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "sound")'>SIN AUDIO</button>
                     <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "both")'>AMBOS</button>
-                    <button class="review-btn" onclick='reviewSourceIssue(${idArgument}, "warning")'>SOLO ADVERTENCIA</button>
                 </div>
             `
             : '';
@@ -1480,9 +1552,9 @@ ${error.message}`);
         card.dataset.id = String(channel.id);
         card.className =
             `channel-card bg-black border ` +
-            `${manualProblem || sourceCritical
+            `${incident
                 ? 'border-red-500'
-                : sourceWarning
+                : sourceMissing
                     ? 'border-amber-500'
                     : 'border-zinc-800'
             } rounded-3xl px-6 py-4`;
@@ -1504,7 +1576,7 @@ ${error.message}`);
                                 ${escapeHTML(sourceStateText(channel))}
                             </span>
                             ${stage}
-                            ${outage ? ` · caída ${escapeHTML(outage)}` : ''}
+                            ${outage ? ` · incidencia ${escapeHTML(outage)}` : ''}
                         </div>
                     </div>
                 </div>
@@ -1540,7 +1612,7 @@ ${error.message}`);
                         <div class="${badgeClass} px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
                             ${badgeText}
                         </div>
-                        ${manualProblem ? buildTimerHTML(channel) : ''}
+                        ${incident ? buildTimerHTML(channel) : ''}
                     </div>
 
                     <button type="button"
@@ -1562,7 +1634,7 @@ ${error.message}`);
 
     // ==================== HELPERS ====================
     function hasProblem(channel) {
-        return hasManualProblem(channel);
+        return isIncident(channel);
     }
 
     function sortChannels() {
@@ -1958,7 +2030,7 @@ ${error.message}`);
             text.textContent =
                 filterOnlyIncidents
                     ? 'MOSTRAR TODOS'
-                    : 'FILTRAR ALERTAS';
+                    : 'FILTRAR INCIDENCIAS';
         }
 
         if (button) {
@@ -2154,15 +2226,15 @@ ${error.message}`);
         ];
 
         channels.forEach(channel => {
-            const start =
-                incidentStart[
-                    String(channel.id)
-                ];
+            const sourceStart = isSourceIncident(channel) && channel.source_outage_since
+                ? new Date(channel.source_outage_since).getTime()
+                : null;
+            const start = Number.isFinite(sourceStart)
+                ? sourceStart
+                : incidentStart[String(channel.id)];
 
             const incidentTime = start
-                ? formatDuration(
-                    (Date.now() - start) / 1000
-                )
+                ? formatDuration((Date.now() - start) / 1000)
                 : '';
 
             rows.push([
@@ -2638,6 +2710,10 @@ ${error.message}`);
             });
     }
 
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape') closeSourceInventory();
+    });
+
     // ==================== INIT ====================
     window.addEventListener(
         'load',
@@ -2697,7 +2773,7 @@ ${error.message}`);
             showLoading(false);
 
             /*
-             * Si hay caídas, degradaciones o incidencias manuales,
+             * Si hay cualquier incidencia (caída, degradación o falla manual),
              * la vista abre directamente filtrada para el NOC.
              */
             filterOnlyIncidents = channels.some(needsAttention);
