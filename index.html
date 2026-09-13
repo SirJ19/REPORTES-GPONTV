@@ -235,42 +235,44 @@
             </div>
         </div>
 
-        <!-- BOTÓN TEMA -->
+        <!-- ALERTAS + BOTÓN TEMA -->
+        <button onclick="toggleBrowserNotifications()" id="notification-btn"
+                class="fixed top-6 right-20 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl"
+                title="Activar o desactivar alertas persistentes" aria-label="Alertas">
+            🔕
+        </button>
         <button onclick="toggleTheme()" id="theme-toggle"
                 class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
             🌙
         </button>
 
-        <!-- SINCRONIZACIÓN AUTOMÁTICA CON GPON -->
+        <!-- SINCRONIZACIÓN AUTOMÁTICA CON DTVSOL -->
         <div class="source-sync-bar">
             <div class="source-sync-meta">
                 <div id="source-sync-dot" class="source-dot idle"></div>
                 <div>
-                    <div class="text-sm font-semibold text-white">FUENTE GPON</div>
+                    <div class="text-sm font-semibold text-white">FUENTE DTVSOL</div>
                     <div id="source-sync-label" class="text-xs text-slate-400">Esperando primera verificación…</div>
                 </div>
                 <button id="source-sync-count" type="button" onclick="openSourceInventory()"
                         class="source-pill source-unknown cursor-pointer"
-                        title="Ver activos, inactivos e incidencias detectadas por GPON">SIN DATOS</button>
+                        title="Ver activos, inactivos e incidencias detectadas por DTVSOL">SIN DATOS</button>
             </div>
             <div class="flex items-center gap-2">
-                <button id="notification-btn" onclick="enableBrowserNotifications()"
-                        class="text-xs px-4 py-2 bg-zinc-950 hover:bg-zinc-900 border border-zinc-800 rounded-2xl">
-                    🔔 ACTIVAR ALERTAS
-                </button>
+                <span class="source-pill source-online" title="La página verifica DTVSOL al abrir y luego cada hora">AUTO · 1 H</span>
                 <button id="sync-now-btn" onclick="syncFromGponSource({ manual: true })"
                         class="text-xs px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-2xl">
-                    ↻ VERIFICAR GPON
+                    ↻ VERIFICAR AHORA
                 </button>
             </div>
         </div>
 
-        <!-- INVENTARIO DE LA FUENTE GPON -->
+        <!-- INVENTARIO DE LA FUENTE DTVSOL -->
         <div id="source-inventory-modal" class="hidden fixed inset-0 z-[10000] bg-black/75 backdrop-blur-sm p-4" onclick="closeSourceInventory(event)">
             <div class="max-w-4xl mx-auto mt-10 bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
                 <div class="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
                     <div>
-                        <h3 class="text-xl font-semibold text-white">Inventario GPON</h3>
+                        <h3 class="text-xl font-semibold text-white">Inventario DTVSOL</h3>
                         <p id="source-inventory-subtitle" class="text-xs text-slate-400 mt-1">Resumen de la última sincronización</p>
                     </div>
                     <button type="button" onclick="closeSourceInventory()" class="text-2xl text-slate-400 hover:text-white">✕</button>
@@ -278,15 +280,15 @@
                 <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-5 gap-3 p-6"></div>
                 <div class="px-6 pb-6 space-y-3 max-h-[62vh] overflow-y-auto">
                     <details open class="border border-red-900/60 rounded-2xl bg-red-950/10">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias GPON <span id="source-incidents-title"></span></summary>
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias DTVSOL <span id="source-incidents-title"></span></summary>
                         <div id="source-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
                     </details>
                     <details class="border border-zinc-700 rounded-2xl">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en GPON <span id="source-active-title"></span></summary>
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en DTVSOL <span id="source-active-title"></span></summary>
                         <div id="source-active-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
                     </details>
                     <details open class="border border-zinc-700 rounded-2xl bg-zinc-900/30">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en GPON <span id="source-disabled-title"></span></summary>
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en DTVSOL <span id="source-disabled-title"></span></summary>
                         <div id="source-disabled-list" class="px-4 pb-4 text-sm text-slate-400 grid md:grid-cols-2 gap-2"></div>
                     </details>
                 </div>
@@ -405,8 +407,11 @@
 
     // ==================== FUENTE GPON / ALERTAS ====================
     const SOURCE_SYNC_FUNCTION = 'swift-api';
-    const SOURCE_SYNC_INTERVAL_MS = 60 * 1000;
-    const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v1';
+    const SOURCE_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hora
+    const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v2';
+    const ALERTS_ENABLED_KEY = 'gpontv_alerts_enabled_v1';
+    const LAST_SOURCE_CHECK_KEY = 'gpontv_last_dtvsol_check_v1';
+    const SERVICE_WORKER_PATH = './dtvsol-sw.js';
     let sourceSyncBusy = false;
     let sourceLastResult = null;
 
@@ -491,16 +496,24 @@
                 ? ` ${online}/${total}`
                 : '';
 
+        /* 3/3 = disponibilidad DTVSOL; no confirma imagen/audio. */
         const labels = {
-            online: `GPON OK${availability}`,
-            down: `CAÍDO GPON${availability}`,
-            degraded: `INCIDENCIA GPON${availability}`,
-            disabled: 'DESACTIVADO EN GPON',
-            missing: 'NO ENCONTRADO EN GPON',
-            unknown: 'SIN DATOS GPON'
+            online: `DTVSOL DISPONIBLE${availability}`,
+            down: `CAÍDO DTVSOL${availability}`,
+            degraded: `DEGRADADO DTVSOL${availability}`,
+            disabled: 'DESACTIVADO EN DTVSOL',
+            missing: 'NO ENCONTRADO EN DTVSOL',
+            unknown: 'SIN DATOS DTVSOL'
         };
 
         return labels[channel.source_state] || labels.unknown;
+    }
+
+    function manualIssueText(channel) {
+        const issues = [];
+        if (!channel.image) issues.push('SIN IMAGEN');
+        if (!channel.sound) issues.push('SIN AUDIO');
+        return issues.join(' + ');
     }
 
     function sourceStateClass(channel) {
@@ -554,7 +567,7 @@
         if (count && sourceLastResult?.ok) {
             const stats = sourceInventoryStats();
             const total = sourceLastResult.fetched ?? stats.synced.length;
-            count.textContent = `${total} GPON · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS`;
+            count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS`;
             count.className = 'source-pill source-online cursor-pointer';
         } else if (count && status === 'error') {
             count.textContent = 'SIN SINCRONIZAR';
@@ -602,7 +615,7 @@
 
         if (summary) {
             const cards = [
-                ['GPON', total, 'text-white'],
+                ['DTVSOL', total, 'text-white'],
                 ['ACTIVOS', stats.active.length, 'text-green-400'],
                 ['INACTIVOS', stats.disabled.length, 'text-zinc-400'],
                 ['INCIDENCIAS', stats.incidents.length, 'text-red-400'],
@@ -660,32 +673,57 @@
         );
     }
 
-    async function enableBrowserNotifications() {
-        const button = document.getElementById('notification-btn');
+    function alertsEnabled() {
+        const saved = localStorage.getItem(ALERTS_ENABLED_KEY);
+        if (saved === null) {
+            return 'Notification' in window && Notification.permission === 'granted';
+        }
+        return saved === 'true';
+    }
 
+    async function getNotificationRegistration() {
+        if (!('serviceWorker' in navigator) || !window.isSecureContext) return null;
+        try {
+            return await navigator.serviceWorker.register(SERVICE_WORKER_PATH);
+        } catch (error) {
+            console.warn('No se pudo registrar el Service Worker de alertas:', error);
+            return null;
+        }
+    }
+
+    async function toggleBrowserNotifications() {
         if (!('Notification' in window)) {
             alert('Este navegador no admite notificaciones.');
             return;
         }
-
         if (!window.isSecureContext) {
             alert('Las notificaciones requieren HTTPS.');
             return;
         }
 
-        const permission = await Notification.requestPermission();
-
-        if (button) {
-            if (permission === 'granted') {
-                button.textContent = '🔔 ALERTAS ACTIVAS';
-                button.classList.add('text-green-400', 'border-green-700');
-            } else {
-                button.textContent = '🔕 ALERTAS BLOQUEADAS';
+        if (alertsEnabled()) {
+            localStorage.setItem(ALERTS_ENABLED_KEY, 'false');
+            const registration = await getNotificationRegistration();
+            if (registration) {
+                const active = await registration.getNotifications();
+                active.forEach(item => item.close());
             }
+            updateNotificationButton();
+            return;
         }
 
+        const permission = Notification.permission === 'granted'
+            ? 'granted'
+            : await Notification.requestPermission();
+
         if (permission === 'granted') {
+            localStorage.setItem(ALERTS_ENABLED_KEY, 'true');
+            await getNotificationRegistration();
+            updateNotificationButton();
             processBrowserNotifications();
+        } else {
+            localStorage.setItem(ALERTS_ENABLED_KEY, 'false');
+            updateNotificationButton();
         }
     }
 
@@ -693,53 +731,66 @@
         const button = document.getElementById('notification-btn');
         if (!button || !('Notification' in window)) return;
 
-        if (Notification.permission === 'granted') {
-            button.textContent = '🔔 ALERTAS ACTIVAS';
-            button.classList.add('text-green-400', 'border-green-700');
-        } else if (Notification.permission === 'denied') {
-            button.textContent = '🔕 ALERTAS BLOQUEADAS';
+        const enabled = alertsEnabled() && Notification.permission === 'granted';
+        button.textContent = enabled ? '🔔' : '🔕';
+        button.title = enabled
+            ? 'Alertas persistentes activas · clic para desactivar'
+            : Notification.permission === 'denied'
+                ? 'Alertas bloqueadas por el navegador'
+                : 'Alertas desactivadas · clic para activar';
+        button.classList.toggle('text-green-400', enabled);
+        button.classList.toggle('border-green-700', enabled);
+    }
+
+    async function showPersistentIncidentNotification(channel) {
+        if (!alertsEnabled() || Notification.permission !== 'granted') return;
+
+        const availability =
+            channel.source_proxies_online !== null &&
+            channel.source_proxies_total !== null
+                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
+                : 'sin disponibilidad';
+        const impact = channel.source_state === 'down' ? 'CAÍDO' : 'DEGRADADO';
+        const key = String(channel.source_channel_id ?? channel.id);
+        const options = {
+            body: `Canal ${channel.number} · ${channel.name}\n${impact} DTVSOL · Disponibilidad: ${availability}`,
+            tag: `dtvsol-incident-${key}`,
+            renotify: true,
+            requireInteraction: true,
+            icon: './favicon.png',
+            badge: './favicon.png',
+            data: { channel: String(channel.number), key }
+        };
+
+        const registration = await getNotificationRegistration();
+        if (registration) {
+            await registration.showNotification('🚨 DTVSOL · INCIDENCIA', options);
+        } else {
+            new Notification('🚨 DTVSOL · INCIDENCIA', options);
         }
     }
 
-    function processBrowserNotifications() {
+    async function processBrowserNotifications() {
+        if (!alertsEnabled() || !('Notification' in window) || Notification.permission !== 'granted') {
+            return;
+        }
+
         const notified = notificationSet();
         let changed = false;
 
-        channels.forEach(channel => {
+        for (const channel of channels) {
             const key = String(channel.source_channel_id ?? channel.id);
 
             if (isSourceIncident(channel)) {
                 if (!notified.has(key)) {
                     notified.add(key);
                     changed = true;
-
-                    if (
-                        'Notification' in window &&
-                        Notification.permission === 'granted'
-                    ) {
-                        const availability =
-                            channel.source_proxies_online !== null &&
-                            channel.source_proxies_total !== null
-                                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                                : 'sin disponibilidad';
-                        const impact = channel.source_state === 'down'
-                            ? 'CAÍDO'
-                            : 'DEGRADADO';
-
-                        new Notification('🚨 GPON TV · INCIDENCIA', {
-                            body:
-                                `Canal ${channel.number} · ${channel.name}
-` +
-                                `${impact} · Disponibilidad: ${availability}`,
-                            tag: `gpontv-incident-${key}`,
-                            renotify: false
-                        });
-                    }
+                    await showPersistentIncidentNotification(channel);
                 }
             } else if (notified.delete(key)) {
                 changed = true;
             }
-        });
+        }
 
         if (changed) saveNotificationSet(notified);
     }
@@ -749,7 +800,7 @@
         if (sourceSyncBusy) return false;
 
         sourceSyncBusy = true;
-        setSourceSyncStatus('syncing', 'Verificando panel GPON…');
+        setSourceSyncStatus('syncing', 'Verificando DTVSOL…');
 
         const button = document.getElementById('sync-now-btn');
         if (button) button.disabled = true;
@@ -767,10 +818,11 @@
 
             if (error) throw error;
             if (!data?.ok) {
-                throw new Error(data?.error || 'La fuente GPON no respondió correctamente.');
+                throw new Error(data?.error || 'La fuente DTVSOL no respondió correctamente.');
             }
 
             sourceLastResult = data;
+            localStorage.setItem(LAST_SOURCE_CHECK_KEY, String(Date.now()));
             await loadChannels();
 
             const attentionCount = channels.filter(needsAttention).length;
@@ -800,11 +852,11 @@
 
             if (manual) {
                 alert(
-                    `Sincronización GPON completada.\n\n` +
-                    `Canales en origen: ${data.fetched}\n` +
+                    `Sincronización DTVSOL completada.\n\n` +
+                    `Canales en DTVSOL: ${data.fetched}\n` +
                     `Nuevos agregados: ${data.inserted || 0}\n` +
                     `Actualizados: ${data.updated || 0}\n` +
-                    `Incidencias GPON: ${(data.states?.down || 0) + (data.states?.degraded || 0)}\n` +
+                    `Incidencias DTVSOL: ${(data.states?.down || 0) + (data.states?.degraded || 0)}\n` +
                     `  • Caídos: ${data.states?.down || 0}\n` +
                     `  • Degradados: ${data.states?.degraded || 0}\n` +
                     `Desactivados: ${data.states?.disabled || 0}`
@@ -813,7 +865,7 @@
 
             return true;
         } catch (error) {
-            console.error('GPON source sync error:', error);
+            console.error('DTVSOL source sync error:', error);
 
             let detail = error?.message || String(error);
             let status = null;
@@ -849,17 +901,17 @@
             } else if (/migraci|column|source_state|source_channel_id/i.test(detail)) {
                 hint = 'Falta ejecutar la migración SQL del monitor en Supabase.';
             } else if (/No se encontraron canales|token pudo vencer/i.test(detail)) {
-                hint = 'La función sí llegó a GPON, pero el token venció o GPON devolvió una página distinta.';
+                hint = 'La función sí llegó a DTVSOL, pero el token venció o DTVSOL devolvió una página distinta.';
             } else if (/Failed to send a request|fetch/i.test(detail)) {
                 hint = 'El navegador no pudo alcanzar la Edge Function. Revisa que esté desplegada y accesible.';
             }
 
             const statusText = status ? `HTTP ${status} · ` : '';
-            setSourceSyncStatus('error', `GPON: ${statusText}${detail}`);
+            setSourceSyncStatus('error', `DTVSOL: ${statusText}${detail}`);
 
             if (manual) {
                 alert(
-                    'No se pudo sincronizar con GPON.\n\n' +
+                    'No se pudo sincronizar con DTVSOL.\n\n' +
                     `${statusText}${detail}` +
                     (hint ? `\n\nSOLUCIÓN: ${hint}` : '')
                 );
@@ -1291,8 +1343,8 @@ ${error.message}`);
 
                 issues.push(
                     channel.source_state === 'down'
-                        ? `Caída GPON ${availability}`
-                        : `Degradación GPON ${availability}`
+                        ? `Caída DTVSOL ${availability}`
+                        : `Degradación DTVSOL ${availability}`
                 );
             }
 
@@ -1518,16 +1570,18 @@ ${error.message}`);
             badgeText = 'INCIDENCIA';
         } else if (sourceMissing) {
             badgeClass = 'status-warning';
-            badgeText = 'NO EN GPON';
+            badgeText = 'NO EN DTVSOL';
         } else if (sourceDisabled) {
             badgeClass = 'status-disabled';
             badgeText = 'DESACTIVADO';
         }
 
         const outage = formatSourceOutage(channel);
-        const stage = channel.source_stage
-            ? ` · ${escapeHTML(channel.source_stage)}`
+        const stageRaw = String(channel.source_stage || '').trim();
+        const stage = stageRaw && !/^(0|1|true|false)$/i.test(stageRaw)
+            ? ` · ${escapeHTML(stageRaw)}`
             : '';
+        const manualIssue = manualIssueText(channel);
 
         const reviewPending =
             (sourceCritical || sourceDegraded) &&
@@ -1538,8 +1592,8 @@ ${error.message}`);
                 <div class="review-box review-critical">
                     <span class="text-xs font-semibold text-red-300">
                         ${sourceCritical
-                            ? '🚨 GPON detecta corte. Ya cuenta como incidencia. Opcional: indica qué está afectado:'
-                            : '🚨 GPON detecta degradación. Ya cuenta como incidencia. Opcional: indica qué está afectado:'}
+                            ? '🚨 DTVSOL detecta corte. Ya cuenta como incidencia. Opcional: indica qué está afectado:'
+                            : '🚨 DTVSOL detecta degradación. Ya cuenta como incidencia. Opcional: indica qué está afectado:'}
                     </span>
                     <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "image")'>SIN IMAGEN</button>
                     <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "sound")'>SIN AUDIO</button>
@@ -1575,6 +1629,7 @@ ${error.message}`);
                             <span class="${sourceStateClass(channel)}">
                                 ${escapeHTML(sourceStateText(channel))}
                             </span>
+                            ${manualIssue ? `<span class="source-pill source-down">NOC: ${escapeHTML(manualIssue)}</span>` : ''}
                             ${stage}
                             ${outage ? ` · incidencia ${escapeHTML(outage)}` : ''}
                         </div>
@@ -2714,6 +2769,30 @@ ${error.message}`);
         if (event.key === 'Escape') closeSourceInventory();
     });
 
+    function sourceCheckIsDue() {
+        const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
+        return !last || (Date.now() - last) >= SOURCE_SYNC_INTERVAL_MS;
+    }
+
+    function setupAutomaticSourceChecks() {
+        setInterval(
+            () => syncFromGponSource({ manual: false }),
+            SOURCE_SYNC_INTERVAL_MS
+        );
+
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && sourceCheckIsDue()) {
+                syncFromGponSource({ manual: false });
+            }
+        });
+
+        window.addEventListener('focus', () => {
+            if (sourceCheckIsDue()) {
+                syncFromGponSource({ manual: false });
+            }
+        });
+    }
+
     // ==================== INIT ====================
     window.addEventListener(
         'load',
@@ -2781,6 +2860,7 @@ ${error.message}`);
 
             lastRenderedIds = '';
             renderChannels();
+            await getNotificationRegistration();
             processBrowserNotifications();
             updateNotificationButton();
 
@@ -2797,10 +2877,7 @@ ${error.message}`);
                 1000
             );
 
-            setInterval(
-                () => syncFromGponSource({ manual: false }),
-                SOURCE_SYNC_INTERVAL_MS
-            );
+            setupAutomaticSourceChecks();
 
             const numberInput =
                 document.getElementById(
