@@ -378,7 +378,7 @@
     let lastRenderedIds = '';
 
     // ==================== FUENTE GPON / ALERTAS ====================
-    const SOURCE_SYNC_FUNCTION = 'gpon-channel-sync';
+    const SOURCE_SYNC_FUNCTION = 'swift-api';
     const SOURCE_SYNC_INTERVAL_MS = 60 * 1000;
     const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v1';
     let sourceSyncBusy = false;
@@ -616,7 +616,12 @@
         try {
             const { data, error } = await sb.functions.invoke(
                 SOURCE_SYNC_FUNCTION,
-                { body: { requestedAt: new Date().toISOString() } }
+                {
+                    headers: {
+                        apikey: supabaseKey
+                    },
+                    body: { requestedAt: new Date().toISOString() }
+                }
             );
 
             if (error) throw error;
@@ -694,9 +699,9 @@
 
             let hint = '';
             if (status === 401 || /jwt|unauthorized|authorization/i.test(detail)) {
-                hint = 'La función está exigiendo JWT. Desactiva Verify JWT para gpon-channel-sync (verify_jwt = false).';
+                hint = 'La función está exigiendo JWT. Desactiva Verify JWT para swift-api (verify_jwt = false).';
             } else if (status === 404 || /not found/i.test(detail)) {
-                hint = 'La Edge Function gpon-channel-sync no está desplegada con ese nombre.';
+                hint = 'La Edge Function swift-api no está desplegada con ese nombre.';
             } else if (/GPON_ADMIN_CHANNELS_URL/i.test(detail)) {
                 hint = 'Falta configurar el Secret GPON_ADMIN_CHANNELS_URL con la URL completa y un token válido.';
             } else if (/migraci|column|source_state|source_channel_id/i.test(detail)) {
