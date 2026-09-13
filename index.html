@@ -1,6 +1,195 @@
-<body class="bg-black text-slate-200 min-h-screen font-sans" style="">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPON TV • Reporte NOC V7</title>
+    <link rel="icon" type="image/png" href="./favicon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+        * {
+            transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-duration: 150ms;
+        }
+        .channel-card { transition: all 0.2s ease; }
+        .channel-card:hover { background-color: #1a1a1a; }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #333333;
+            border-radius: 9999px;
+            border: 2px solid #555555;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #22c55e;
+            border-color: #22c55e;
+        }
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+        .status-ok { background-color: #22c55e; color: #ffffff !important; font-weight: 700; }
+        .status-problem { background-color: #ef4444; color: #ffffff; font-weight: 700; }
+        .status-text { font-family: 'Inter', system-ui, sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: 0.5px; }
+        .text-yes { color: #22c55e; font-weight: 700; }
+        .text-no { color: #ef4444; font-weight: 700; letter-spacing: 1px; }
+        body.light { background-color: #f8fafc; color: #0f172a; }
+        body.light .bg-black { background-color: #ffffff !important; }
+        body.light .bg-zinc-900 { background-color: #f1f5f9 !important; }
+        body.light .bg-zinc-950 { background-color: #f8fafc !important; }
+        body.light .border-zinc-800 { border-color: #e2e8f0 !important; }
+        body.light .text-slate-200 { color: #0f172a !important; }
+        body.light .text-white { color: #0f172a !important; }
+        body.light .text-slate-400 { color: #64748b !important; }
+        body.light .channel-card:hover { background-color: #f1f5f9 !important; }
 
-    <div id="loading-overlay" class="hidden">
+        /* Timer de avería */
+        .incident-timer {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.35);
+            border-radius: 9999px;
+            padding: 2px 10px;
+            font-family: 'Space Grotesk', monospace;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #fca5a5;
+            letter-spacing: 0.5px;
+            white-space: nowrap;
+            animation: pulse-border 2s ease-in-out infinite;
+        }
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(239,68,68,0.35); }
+            50% { border-color: rgba(239,68,68,0.75); }
+        }
+        .incident-timer .dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: blink 1s step-start infinite;
+            flex-shrink: 0;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        body.light .incident-timer {
+            background: rgba(239,68,68,0.08);
+            color: #b91c1c;
+        }
+
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999; backdrop-filter: blur(4px);
+        }
+        #loading-overlay.hidden { display: none; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 3px solid #333;
+            border-top-color: #f97316;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Botón limpiar búsqueda */
+        .search-clear-btn {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 22px;
+            height: 22px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9999px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            line-height: 1;
+        }
+        .search-clear-btn:hover {
+            background-color: rgba(148,163,184,0.15);
+            color: #f97316;
+        }
+        .search-clear-btn.visible { display: flex; }
+
+
+        /* ==================== GPON SOURCE MONITOR ==================== */
+        .source-sync-bar {
+            display:flex; align-items:center; justify-content:space-between; gap:14px;
+            background:#0a0a0a; border:1px solid #27272a; border-radius:24px;
+            padding:12px 16px; margin-bottom:18px;
+        }
+        .source-sync-meta { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+        .source-dot { width:9px; height:9px; border-radius:9999px; flex-shrink:0; }
+        .source-dot.online { background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,.5); }
+        .source-dot.syncing { background:#f59e0b; animation:blink 1s step-start infinite; }
+        .source-dot.error { background:#ef4444; }
+        .source-dot.idle { background:#71717a; }
+        .source-pill {
+            display:inline-flex; align-items:center; gap:6px; border-radius:9999px;
+            padding:4px 9px; font-size:.72rem; font-weight:700; letter-spacing:.35px;
+            border:1px solid #3f3f46; white-space:nowrap;
+        }
+        .source-online { color:#86efac; border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
+        .source-down { color:#fca5a5; border-color:rgba(239,68,68,.55); background:rgba(239,68,68,.10); }
+        .source-degraded { color:#fcd34d; border-color:rgba(245,158,11,.55); background:rgba(245,158,11,.10); }
+        .source-disabled { color:#a1a1aa; border-color:#3f3f46; background:rgba(113,113,122,.08); }
+        .source-missing, .source-unknown { color:#fdba74; border-color:rgba(249,115,22,.45); background:rgba(249,115,22,.08); }
+        .review-box {
+            margin-top:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+            padding:8px 10px; border:1px dashed rgba(245,158,11,.55); border-radius:16px;
+            background:rgba(245,158,11,.06);
+        }
+        .review-box.review-critical { border-color:rgba(239,68,68,.6); background:rgba(239,68,68,.06); }
+        .review-btn {
+            border:1px solid #3f3f46; border-radius:9999px; padding:5px 10px;
+            font-size:.72rem; font-weight:700; background:#111; color:#e5e7eb;
+        }
+        .review-btn:hover { border-color:#f97316; color:#fb923c; }
+        .review-btn.danger:hover { border-color:#ef4444; color:#fca5a5; }
+        .source-subline { font-size:.72rem; color:#71717a; margin-top:4px; }
+        .status-warning { background-color:#f59e0b; color:#111827 !important; font-weight:800; }
+        .status-disabled { background-color:#3f3f46; color:#d4d4d8 !important; font-weight:700; }
+        .status-pending { background-color:#dc2626; color:#fff !important; font-weight:800; }
+        body.light .source-sync-bar { background:#fff !important; border-color:#e2e8f0 !important; }
+        body.light .review-box { background:rgba(245,158,11,.05); }
+        body.light .review-btn { background:#fff; color:#334155; border-color:#cbd5e1; }
+
+    </style>
+</head>
+<body class="bg-black text-slate-200 min-h-screen font-sans">
+
+    <div id="loading-overlay">
         <div class="flex flex-col items-center gap-4">
             <div class="spinner"></div>
             <span class="text-slate-400 text-sm">Cargando...</span>
@@ -18,25 +207,27 @@
                 </div>
             </div>
             
-            <div id="current-datetime" class="font-mono text-lg text-slate-400 tracking-widest">13/09/2026 04:16</div>
+            <div id="current-datetime" class="font-mono text-lg text-slate-400 tracking-widest"></div>
             
             <div class="flex items-center gap-4">
                 <div class="flex items-center gap-8">
                     <div class="text-right">
                         <div class="text-xs text-slate-400">TOTAL</div>
-                        <div id="total-channels" class="text-4xl font-semibold">87</div>
+                        <div id="total-channels" class="text-4xl font-semibold">0</div>
                     </div>
                     <div class="text-right">
                         <div class="text-xs text-slate-400">INCIDENCIAS</div>
-                        <div id="incidents-count" class="text-4xl font-semibold text-red-400">4</div>
+                        <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
                     </div>
                 </div>
                 <div class="flex flex-col items-stretch gap-1.5">
-                    <button onclick="toggleForm()" id="toggle-form-btn" class="flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
-                        <span id="form-icon">▼</span>
+                    <button onclick="toggleForm()" id="toggle-form-btn"
+                            class="flex items-center justify-center gap-2 px-5 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
+                        <span id="form-icon">▲</span>
                         <span id="form-text">Panel</span>
                     </button>
-                    <button onclick="copyIncidentReport()" id="copy-report-btn" class="flex items-center justify-center gap-1.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-2xl text-xs font-medium text-slate-400">
+                    <button onclick="copyIncidentReport()" id="copy-report-btn"
+                            class="flex items-center justify-center gap-1.5 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-2xl text-xs font-medium text-slate-400">
                         <span id="copy-btn-icon">📋</span>
                         <span id="copy-btn-text">COPIAR</span>
                     </button>
@@ -45,93 +236,81 @@
         </div>
 
         <!-- ALERTAS + BOTÓN TEMA -->
-        <button onclick="toggleBrowserNotifications()" id="notification-btn" class="fixed top-6 right-20 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl text-green-400 border-green-700" title="Alertas persistentes activas · clic para desactivar" aria-label="Alertas">🔔</button>
-        <button onclick="toggleTheme()" id="theme-toggle" class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">☀️</button>
+        <button onclick="toggleBrowserNotifications()" id="notification-btn"
+                class="fixed top-6 right-20 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl"
+                title="Activar o desactivar alertas persistentes" aria-label="Alertas">
+            🔕
+        </button>
+        <button onclick="toggleTheme()" id="theme-toggle"
+                class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl">
+            🌙
+        </button>
 
         <!-- SINCRONIZACIÓN AUTOMÁTICA CON DTVSOL -->
         <div class="source-sync-bar">
             <div class="source-sync-meta">
-                <div id="source-sync-dot" class="source-dot online"></div>
+                <div id="source-sync-dot" class="source-dot idle"></div>
                 <div>
                     <div class="text-sm font-semibold text-white">FUENTE DTVSOL</div>
-                    <div id="source-sync-label" class="text-xs text-slate-400">Última verificación DTVSOL 03:40:27 a. m. · revisión automática cada 10 min</div>
+                    <div id="source-sync-label" class="text-xs text-slate-400">Esperando primera verificación…</div>
                 </div>
-                <button id="source-sync-count" type="button" onclick="openSourceInventory()" class="source-pill source-online cursor-pointer" title="Ver activos, inactivos e incidencias detectadas por DTVSOL">87 DTVSOL · 83 ACTIVOS · 4 INACTIVOS</button>
+                <button id="source-sync-count" type="button" onclick="openSourceInventory()"
+                        class="source-pill source-unknown cursor-pointer"
+                        title="Ver activos, inactivos e incidencias detectadas por DTVSOL">SIN DATOS</button>
             </div>
             <div class="flex items-center gap-2">
-                <span class="source-pill source-online" title="La página verifica DTVSOL al abrir y luego cada 10 minutos">AUTO · 10 MIN</span>
-                <button id="sync-now-btn" onclick="syncFromGponSource({ manual: true })" class="text-xs px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-2xl">
+                <span class="source-pill source-online" title="La página verifica DTVSOL al abrir y luego cada hora">AUTO · 1 H</span>
+                <button id="sync-now-btn" onclick="syncFromGponSource({ manual: true })"
+                        class="text-xs px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-2xl">
                     ↻ VERIFICAR AHORA
                 </button>
             </div>
         </div>
 
         <!-- INVENTARIO DE LA FUENTE DTVSOL -->
-        <div id="source-inventory-modal" class="fixed inset-0 z-[10000] bg-black/75 backdrop-blur-sm p-4 hidden" onclick="closeSourceInventory(event)">
+        <div id="source-inventory-modal" class="hidden fixed inset-0 z-[10000] bg-black/75 backdrop-blur-sm p-4" onclick="closeSourceInventory(event)">
             <div class="max-w-4xl mx-auto mt-10 bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
                 <div class="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
                     <div>
                         <h3 class="text-xl font-semibold text-white">Inventario DTVSOL</h3>
-                        <p id="source-inventory-subtitle" class="text-xs text-slate-400 mt-1">Última sincronización: sin fecha</p>
+                        <p id="source-inventory-subtitle" class="text-xs text-slate-400 mt-1">Resumen de la última sincronización</p>
                     </div>
                     <button type="button" onclick="closeSourceInventory()" class="text-2xl text-slate-400 hover:text-white">✕</button>
                 </div>
-                <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-5 gap-3 p-6">
-                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
-                    <div class="text-[11px] text-slate-500">DTVSOL</div>
-                    <div class="text-2xl font-bold text-white">87</div>
-                </div>
-            
-                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
-                    <div class="text-[11px] text-slate-500">ACTIVOS</div>
-                    <div class="text-2xl font-bold text-green-400">83</div>
-                </div>
-            
-                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
-                    <div class="text-[11px] text-slate-500">INACTIVOS</div>
-                    <div class="text-2xl font-bold text-zinc-400">4</div>
-                </div>
-            
-                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
-                    <div class="text-[11px] text-slate-500">INCIDENCIAS</div>
-                    <div class="text-2xl font-bold text-red-400">1</div>
-                </div>
-            
-                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
-                    <div class="text-[11px] text-slate-500">EN MONITOR</div>
-                    <div class="text-2xl font-bold text-orange-400">87</div>
-                </div>
-            </div>
+                <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-5 gap-3 p-6"></div>
                 <div class="px-6 pb-6 space-y-3 max-h-[62vh] overflow-y-auto">
-                    <details class="border border-red-900/60 rounded-2xl bg-red-950/10">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias DTVSOL <span id="source-incidents-title">(1)</span></summary>
-                        <div id="source-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">222</span> · <span>Love Nature HD</span><span class="text-xs text-slate-500"> · CAÍDO · 0/3</span></div></div>
+                    <details open class="border border-red-900/60 rounded-2xl bg-red-950/10">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias DTVSOL <span id="source-incidents-title"></span></summary>
+                        <div id="source-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
                     </details>
                     <details class="border border-zinc-700 rounded-2xl">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en DTVSOL <span id="source-active-title">(83)</span></summary>
-                        <div id="source-active-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">1</span> · <span>Liga1 MAX</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">2</span> · <span>Latina HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">3</span> · <span>Liga1</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">4</span> · <span>America HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">5</span> · <span>Panamericana HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">6</span> · <span>RPP</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">7</span> · <span>TV Peru HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">8</span> · <span>TV Peru 7.3</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">9</span> · <span>ATV HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">10</span> · <span>ATV+ HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">11</span> · <span>La Tele HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">12</span> · <span>Willax HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">13</span> · <span>Exitosa HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">14</span> · <span>PBO</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">15</span> · <span>Usmp TV HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">16</span> · <span>Justicia TV</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">17</span> · <span>Jn19 TV HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">18</span> · <span>TV en Linea</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">19</span> · <span>Global HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">20</span> · <span>Telemundo</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">21</span> · <span>Bethel HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">26</span> · <span>iPe</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">28</span> · <span>Canal Caracol HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">30</span> · <span>Canal del Congreso HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">31</span> · <span>Las Estrellas HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">32</span> · <span>Canal Institucional HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">33</span> · <span>Canal RCN HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">39</span> · <span>City TV HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">52</span> · <span>Ecuador TV</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">63</span> · <span>France 24</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">83</span> · <span>RCN Novelas HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">85</span> · <span>Senal Colombia HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">98</span> · <span>Teleantioquia HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">99</span> · <span>Telecafe HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">100</span> · <span>Teleislas HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">101</span> · <span>Telecaribe HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">103</span> · <span>Telepacifico HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">107</span> · <span>TRO HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">108</span> · <span>Trece HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">109</span> · <span>CNN HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">112</span> · <span>Warner HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">114</span> · <span>VIAX</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">121</span> · <span>TeleLima</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">122</span> · <span>ONDA HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">123</span> · <span>ONDA 2 HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">124</span> · <span>RADIO ONDA DIGITAL</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">200</span> · <span>TACALA</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">201</span> · <span>OYE Movies HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">202</span> · <span>OYE Musica</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">203</span> · <span>OYE Action HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">204</span> · <span>OYE Vallenato HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">205</span> · <span>OYE Kids HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">206</span> · <span>Canal 39</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">207</span> · <span>CTC HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">208</span> · <span>CTC Radio</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">209</span> · <span>Nativa</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">210</span> · <span>Milenial</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">211</span> · <span>RT</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">212</span> · <span>Inka Visión</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">214</span> · <span>TV Mundo</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">216</span> · <span>SUMtv Latino</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">217</span> · <span>Media TV</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">218</span> · <span>Cumbia Tv</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">219</span> · <span>Urbano Tv</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">220</span> · <span>Salsa Tv</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">221</span> · <span>Cultura Tv</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">222</span> · <span>Love Nature HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">223</span> · <span>Trivu</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">224</span> · <span>Corazon Tv</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">225</span> · <span>CTV</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">226</span> · <span>KALIENTE TELEVISION</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">227</span> · <span>CUSCOPLAY</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">228</span> · <span>Qosqo Times</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">229</span> · <span>SUYAI TV</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">230</span> · <span>SUYAI RADIO</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">303</span> · <span>A3 CINE</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">304</span> · <span>Comedy Central</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">305</span> · <span>ESPN</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">306</span> · <span>ESPN 2</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">307</span> · <span>ESPN 3</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">308</span> · <span>ESPN 5</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">309</span> · <span>ESPN 6</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">310</span> · <span>ESPN 7</span><span class="text-xs text-slate-500"></span></div></div>
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en DTVSOL <span id="source-active-title"></span></summary>
+                        <div id="source-active-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
                     </details>
-                    <details class="border border-zinc-700 rounded-2xl bg-zinc-900/30">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en DTVSOL <span id="source-disabled-title">(4)</span></summary>
-                        <div id="source-disabled-list" class="px-4 pb-4 text-sm text-slate-400 grid md:grid-cols-2 gap-2"><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">118</span> · <span>Zoom</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">119</span> · <span>RBC HD</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">300</span> · <span>Radio Z</span><span class="text-xs text-slate-500"></span></div><div class="rounded-xl border border-zinc-800 px-3 py-2"><span class="font-mono text-orange-400">302</span> · <span>GolTV HD</span><span class="text-xs text-slate-500"></span></div></div>
+                    <details open class="border border-zinc-700 rounded-2xl bg-zinc-900/30">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en DTVSOL <span id="source-disabled-title"></span></summary>
+                        <div id="source-disabled-list" class="px-4 pb-4 text-sm text-slate-400 grid md:grid-cols-2 gap-2"></div>
                     </details>
                 </div>
             </div>
         </div>
 
         <!-- FORMULARIO -->
-        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7" style="display: none;">
+        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
             <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
             <div class="flex gap-4">
                 <div class="w-28">
                     <label class="block text-xs font-medium text-slate-400 mb-1">NÚMERO</label>
-                    <input id="channel-number" type="text" placeholder="7" class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-2xl font-mono font-bold outline-none text-center">
+                    <input id="channel-number" type="text" placeholder="7"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-2xl font-mono font-bold outline-none text-center">
                 </div>
                 <div class="flex-1">
                     <label class="block text-xs font-medium text-slate-400 mb-1">NOMBRE DEL CANAL</label>
-                    <input id="channel-name" type="text" placeholder="América TV" class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-lg outline-none">
+                    <input id="channel-name" type="text" placeholder="América TV"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-lg outline-none">
                 </div>
-                <button onclick="addChannel()" class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl text-base shadow-lg">
+                <button onclick="addChannel()"
+                        class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl text-base shadow-lg">
                     AGREGAR
                 </button>
             </div>
@@ -139,286 +318,41 @@
 
         <!-- LISTADO -->
         <div class="flex justify-between items-center mb-5">
-            <h2 id="view-title" class="text-2xl font-semibold text-white">Canales con incidencias (4)</h2>
+            <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
            
             <div class="flex items-center gap-3 flex-1 justify-end">
                 <div class="relative w-64 md:w-77">
                     <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
-                    <input id="search-input" type="text" placeholder="Buscar canal..." oninput="updateSearch(this.value)" class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-9 py-3 text-base outline-none">
-                    <button id="search-clear-btn" type="button" class="search-clear-btn" onclick="clearSearch()" aria-label="Limpiar búsqueda" title="Limpiar búsqueda">✕</button>
+                    <input
+                        id="search-input"
+                        type="text"
+                        placeholder="Buscar canal..."
+                        oninput="updateSearch(this.value)"
+                        class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-9 py-3 text-base outline-none"
+                    >
+                    <button
+                        id="search-clear-btn"
+                        type="button"
+                        class="search-clear-btn"
+                        onclick="clearSearch()"
+                        aria-label="Limpiar búsqueda"
+                        title="Limpiar búsqueda"
+                    >✕</button>
                 </div>
-                <button onclick="toggleFilter()" id="filter-button" class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0 bg-orange-500 text-white">
-                    <span id="filter-icon">📋</span>
-                    <span id="filter-text">MOSTRAR TODOS</span>
+                <button onclick="toggleFilter()" id="filter-button"
+                        class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
+                    <span id="filter-icon">🔴</span>
+                    <span id="filter-text">FILTRAR INCIDENCIAS</span>
                 </button>
-                <button onclick="resetAllStates()" class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
+                <button onclick="resetAllStates()"
+                        class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
                     🔄 REINICIAR ESTADO
                 </button>
             </div>
         </div>
 
 
-        <div id="channels-list" class="space-y-2"><div data-id="53566" class="channel-card bg-black border border-red-500 rounded-3xl px-6 py-4">
-            <div class="flex items-center justify-between gap-5">
-                <div class="flex items-center gap-6 min-w-0">
-                    <div class="w-14 text-center shrink-0">
-                        <div class="text-3xl font-mono font-bold text-orange-400">
-                            109
-                        </div>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-xl font-semibold truncate">
-                            CNN HD
-                        </div>
-                        <div class="source-subline">
-                            <span class="source-pill source-online">
-                                DTVSOL 3/3
-                            </span>
-                            
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-6 shrink-0">
-                    <span class="source-pill source-down" title="Validación manual NOC de imagen y audio">
-                               NOC · SIN IMAGEN
-                           </span>
-
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">IMAGEN</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateImage(53566, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">AUDIO</span>
-                        <span class="status-text text-yes">
-                            SÍ
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" checked="" onchange="updateSound(53566, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <div class="status-problem px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
-                            INCIDENCIA
-                        </div>
-                        
-            <span class="incident-timer" title="Tiempo global de incidencia (DTVSOL/NOC)">
-                <span class="dot"></span>
-                <span data-timer-id="53566" data-incident-start="1789290734089">4m</span>
-            </span>
-        
-                    </div>
-
-                    <button type="button" onclick="deleteChannel(53566)" class="ml-1 text-xl text-slate-500 hover:text-red-400" title="Eliminar del monitor">✕</button>
-                </div>
-            </div>
-            
-        </div><div data-id="53560" class="channel-card bg-black border border-red-500 rounded-3xl px-6 py-4">
-            <div class="flex items-center justify-between gap-5">
-                <div class="flex items-center gap-6 min-w-0">
-                    <div class="w-14 text-center shrink-0">
-                        <div class="text-3xl font-mono font-bold text-orange-400">
-                            222
-                        </div>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-xl font-semibold truncate">
-                            Love Nature HD
-                        </div>
-                        <div class="source-subline">
-                            <span class="source-pill source-down">
-                                DTVSOL 0/3
-                            </span>
-                            
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-6 shrink-0">
-                    <span class="source-pill source-down" title="Validación manual NOC de imagen y audio">
-                               NOC · SIN IMAGEN + SIN AUDIO
-                           </span>
-
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">IMAGEN</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateImage(53560, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">AUDIO</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateSound(53560, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <div class="status-problem px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
-                            INCIDENCIA
-                        </div>
-                        
-            <span class="incident-timer" title="Tiempo global de incidencia (DTVSOL/NOC)">
-                <span class="dot"></span>
-                <span data-timer-id="53560" data-incident-start="1789287744452">54m</span>
-            </span>
-        
-                    </div>
-
-                    <button type="button" onclick="deleteChannel(53560)" class="ml-1 text-xl text-slate-500 hover:text-red-400" title="Eliminar del monitor">✕</button>
-                </div>
-            </div>
-            
-        </div><div data-id="53573" class="channel-card bg-black border border-red-500 rounded-3xl px-6 py-4">
-            <div class="flex items-center justify-between gap-5">
-                <div class="flex items-center gap-6 min-w-0">
-                    <div class="w-14 text-center shrink-0">
-                        <div class="text-3xl font-mono font-bold text-orange-400">
-                            229
-                        </div>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-xl font-semibold truncate">
-                            SUYAI TV
-                        </div>
-                        <div class="source-subline">
-                            <span class="source-pill source-down">
-                                DTVSOL 0/3
-                            </span>
-                            
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-6 shrink-0">
-                    <span class="source-pill source-down" title="Validación manual NOC de imagen y audio">
-                               NOC · SIN IMAGEN + SIN AUDIO
-                           </span>
-
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">IMAGEN</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateImage(53573, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">AUDIO</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateSound(53573, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <div class="status-problem px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
-                            INCIDENCIA
-                        </div>
-                        
-            <span class="incident-timer" title="Tiempo global de incidencia (DTVSOL/NOC)">
-                <span class="dot"></span>
-                <span data-timer-id="53573" data-incident-start="1789290734089">4m</span>
-            </span>
-        
-                    </div>
-
-                    <button type="button" onclick="deleteChannel(53573)" class="ml-1 text-xl text-slate-500 hover:text-red-400" title="Eliminar del monitor">✕</button>
-                </div>
-            </div>
-            
-        </div><div data-id="53574" class="channel-card bg-black border border-red-500 rounded-3xl px-6 py-4">
-            <div class="flex items-center justify-between gap-5">
-                <div class="flex items-center gap-6 min-w-0">
-                    <div class="w-14 text-center shrink-0">
-                        <div class="text-3xl font-mono font-bold text-orange-400">
-                            230
-                        </div>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="text-xl font-semibold truncate">
-                            SUYAI RADIO
-                        </div>
-                        <div class="source-subline">
-                            <span class="source-pill source-down">
-                                DTVSOL 0/3
-                            </span>
-                            
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-6 shrink-0">
-                    <span class="source-pill source-down" title="Validación manual NOC de imagen y audio">
-                               NOC · SIN IMAGEN + SIN AUDIO
-                           </span>
-
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">IMAGEN</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateImage(53574, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-medium text-xs">AUDIO</span>
-                        <span class="status-text text-no">
-                            NO
-                        </span>
-                        <label class="switch">
-                            <input type="checkbox" onchange="updateSound(53574, this.checked)">
-                            <span class="slider"></span>
-                        </label>
-                    </div>
-
-                    <div class="flex items-center gap-2">
-                        <div class="status-problem px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
-                            INCIDENCIA
-                        </div>
-                        
-            <span class="incident-timer" title="Tiempo global de incidencia (DTVSOL/NOC)">
-                <span class="dot"></span>
-                <span data-timer-id="53574" data-incident-start="1789290734089">4m</span>
-            </span>
-        
-                    </div>
-
-                    <button type="button" onclick="deleteChannel(53574)" class="ml-1 text-xl text-slate-500 hover:text-red-400" title="Eliminar del monitor">✕</button>
-                </div>
-            </div>
-            
-        </div></div>
+        <div id="channels-list" class="space-y-2"></div>
         <div id="empty-state" class="hidden text-center py-16">
             <div class="text-6xl mb-4">📺</div>
             <h3 id="empty-title" class="text-2xl font-medium text-white">No hay canales aún</h3>
@@ -429,13 +363,13 @@
     <!-- BARRA INFERIOR -->
     <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
         <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
-            <div id="footer-dot" class="w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse"></div>
-            <span id="footer-text" class="font-medium text-sm">4 incidencias</span>
+            <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
+            <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
         </div>
         <div class="w-px h-4 bg-zinc-700"></div>
         <div class="flex items-center gap-1.5" title="Estado de sincronización en tiempo real">
-            <div id="realtime-dot" class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span id="realtime-label" class="text-xs text-slate-500 font-mono tracking-wide">ONLINE</span>
+            <div id="realtime-dot" class="w-2 h-2 rounded-full bg-yellow-400"></div>
+            <span id="realtime-label" class="text-xs text-slate-500 font-mono tracking-wide">CONECTANDO…</span>
         </div>
         <div class="w-px h-4 bg-zinc-700"></div>
         <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
@@ -473,12 +407,10 @@
 
     // ==================== FUENTE GPON / ALERTAS ====================
     const SOURCE_SYNC_FUNCTION = 'swift-api';
-    const SOURCE_SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutos
-    const SOURCE_RETRY_INTERVAL_MS = 30 * 60 * 1000; // 30 min tras error
+    const SOURCE_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hora
     const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v2';
     const ALERTS_ENABLED_KEY = 'gpontv_alerts_enabled_v1';
     const LAST_SOURCE_CHECK_KEY = 'gpontv_last_dtvsol_check_v1';
-    const SOURCE_FAILURE_UNTIL_KEY = 'gpontv_dtvsol_failure_until_v1';
     const SERVICE_WORKER_PATH = './dtvsol-sw.js';
     let sourceSyncBusy = false;
     let sourceLastResult = null;
@@ -934,7 +866,6 @@
 
             sourceLastResult = data;
             localStorage.setItem(LAST_SOURCE_CHECK_KEY, String(Date.now()));
-            localStorage.removeItem(SOURCE_FAILURE_UNTIL_KEY);
             await loadChannels();
 
             const attentionCount = channels.filter(needsAttention).length;
@@ -1022,13 +953,6 @@
 
             const statusText = status ? `HTTP ${status} · ` : '';
             setSourceSyncStatus('error', `DTVSOL: ${statusText}${detail}`);
-
-            if (!manual) {
-                localStorage.setItem(
-                    SOURCE_FAILURE_UNTIL_KEY,
-                    String(Date.now() + SOURCE_RETRY_INTERVAL_MS)
-                );
-            }
 
             if (manual) {
                 alert(
@@ -1273,31 +1197,6 @@ ${error.message}`);
 
         channels = (data || []).map(mapRowToChannel);
         channels.forEach(syncIncidentStart);
-
-        /*
-         * Usa la última verificación guardada en Supabase como referencia global.
-         * Así varias PCs/NOC no consultan DTVSOL otra vez apenas abren la web.
-         */
-        const latestSharedCheck = channels.reduce((latest, channel) => {
-            const timestamp = channel.source_last_checked
-                ? new Date(channel.source_last_checked).getTime()
-                : 0;
-            return Number.isFinite(timestamp)
-                ? Math.max(latest, timestamp)
-                : latest;
-        }, 0);
-
-        const localCheck = Number(
-            localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0
-        );
-
-        if (latestSharedCheck > localCheck) {
-            localStorage.setItem(
-                LAST_SOURCE_CHECK_KEY,
-                String(latestSharedCheck)
-            );
-        }
-
         return true;
     }
 
@@ -1734,6 +1633,8 @@ ${error.message}`);
         const stage = stageRaw && !/^(0|1|true|false)$/i.test(stageRaw)
             ? ` · ${escapeHTML(stageRaw)}`
             : '';
+        const manualIssue = manualIssueText(channel);
+
         const reviewPending =
             (sourceCritical || sourceDegraded) &&
             !manualProblem;
@@ -1766,27 +1667,17 @@ ${error.message}`);
 
         card.innerHTML = `
             <div class="flex items-center justify-between gap-5">
-                <div class="flex items-center gap-6 min-w-0 flex-1">
+                <div class="flex items-center gap-6 min-w-0">
                     <div class="w-14 text-center shrink-0">
                         <div class="text-3xl font-mono font-bold text-orange-400">
                             ${escapeHTML(channel.number)}
                         </div>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="text-xl font-semibold whitespace-normal leading-tight">
+                    <div class="min-w-0">
+                        <div class="text-xl font-semibold truncate">
                             ${escapeHTML(channel.name)}
                         </div>
-                        <div class="source-subline flex flex-col items-start gap-1 mt-1">
-                            ${channel.incident_open && !isSourceIncident(channel) && !manualProblem
-                                ? `<button class="source-pill source-degraded"
-                                           title="DTVSOL ya recuperó. Confirma NOC OK para cerrar la incidencia global."
-                                           onclick='confirmNocOk(${idArgument})'>
-                                       NOC: VALIDAR
-                                   </button>`
-                                : `<span class="source-pill ${manualProblem ? 'source-down' : 'source-online'}"
-                                         title="Estado validado por NOC; el detalle está en Imagen/Audio">
-                                       NOC:
-                                   </span>`}
+                        <div class="source-subline">
                             <span class="${sourceStateClass(channel)}">
                                 ${escapeHTML(sourceStateText(channel))}
                             </span>
@@ -1796,6 +1687,18 @@ ${error.message}`);
                 </div>
 
                 <div class="flex items-center gap-6 shrink-0">
+                    ${channel.incident_open && !isSourceIncident(channel) && !manualProblem
+                        ? `<button class="source-pill source-degraded"
+                                   title="DTVSOL ya recuperó. Confirma NOC OK para cerrar la incidencia global."
+                                   onclick='confirmNocOk(${idArgument})'>
+                               NOC: VALIDAR
+                           </button>`
+                        : `<span class="source-pill ${manualProblem ? 'source-down' : 'source-online'}"
+                                 title="Validación manual NOC de imagen y audio">
+                               NOC:
+                           </span>`}
+
+
                     <div class="flex items-center gap-2">
                         <span class="text-white font-medium text-xs">IMAGEN</span>
                         <span class="status-text ${channel.image ? 'text-yes' : 'text-no'}">
@@ -2965,17 +2868,8 @@ ${error.message}`);
     });
 
     function sourceCheckIsDue() {
-        if (sourceSyncBusy) return false;
-
-        const now = Date.now();
-        const failureUntil = Number(
-            localStorage.getItem(SOURCE_FAILURE_UNTIL_KEY) || 0
-        );
-
-        if (failureUntil > now) return false;
-
         const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
-        return !last || (now - last) >= SOURCE_SYNC_INTERVAL_MS;
+        return !last || (Date.now() - last) >= SOURCE_SYNC_INTERVAL_MS;
     }
 
     let sourceAutoTimer = null;
@@ -2983,20 +2877,9 @@ ${error.message}`);
     function scheduleNextSourceCheck() {
         if (sourceAutoTimer) clearTimeout(sourceAutoTimer);
 
-        const now = Date.now();
-        const failureUntil = Number(
-            localStorage.getItem(SOURCE_FAILURE_UNTIL_KEY) || 0
-        );
-
-        let delay;
-
-        if (failureUntil > now) {
-            delay = failureUntil - now;
-        } else {
-            const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
-            const elapsed = last ? now - last : SOURCE_SYNC_INTERVAL_MS;
-            delay = Math.max(1000, SOURCE_SYNC_INTERVAL_MS - elapsed);
-        }
+        const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
+        const elapsed = last ? Date.now() - last : SOURCE_SYNC_INTERVAL_MS;
+        const delay = Math.max(1000, SOURCE_SYNC_INTERVAL_MS - elapsed);
 
         sourceAutoTimer = setTimeout(async () => {
             await syncFromGponSource({ manual: false });
@@ -3078,7 +2961,7 @@ ${error.message}`);
             /*
              * Carga primero la última información guardada en Supabase para que
              * recargar la página sea inmediato. La consulta a DTVSOL corre luego
-             * en segundo plano solo si ya corresponde la revisión de 10 minutos.
+             * en segundo plano solo si ya corresponde la revisión de 1 hora.
              */
             await loadChannels();
 
@@ -3092,7 +2975,7 @@ ${error.message}`);
                 const lastText = new Date(lastCheck).toLocaleTimeString('es-PE', {
                     hour: '2-digit', minute: '2-digit', second: '2-digit'
                 });
-                setSourceSyncStatus('online', `Última verificación DTVSOL ${lastText} · revisión automática cada 10 min`);
+                setSourceSyncStatus('online', `Última verificación DTVSOL ${lastText} · revisión automática cada 1 h`);
             } else {
                 setSourceSyncStatus('idle', 'Datos guardados cargados · preparando primera verificación DTVSOL…');
             }
@@ -3155,5 +3038,5 @@ ${error.message}`);
         }
     );
 </script>
-
 </body>
+</html>
