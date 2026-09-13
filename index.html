@@ -161,6 +161,86 @@
             padding:4px 9px; font-size:.72rem; font-weight:700; letter-spacing:.35px;
             border:1px solid #3f3f46; white-space:nowrap;
         }
+        .proxy-pill {
+            padding:3px 7px;
+            font-size:.66rem;
+            gap:4px;
+            letter-spacing:.25px;
+        }
+        .source-subline {
+            display:flex;
+            align-items:center;
+            gap:6px;
+            flex-wrap:wrap;
+        }
+        .health-badge {
+            position:relative;
+            display:inline-flex;
+            align-items:center;
+            border-radius:9999px;
+            padding:3px 7px;
+            font-size:.64rem;
+            line-height:1;
+            font-weight:800;
+            letter-spacing:.25px;
+            white-space:nowrap;
+            cursor:help;
+            border:1px solid rgba(245,158,11,.48);
+            background:rgba(245,158,11,.08);
+            color:#fcd34d;
+        }
+        .health-badge.health-unstable {
+            border-color:rgba(249,115,22,.60);
+            background:rgba(249,115,22,.11);
+            color:#fdba74;
+        }
+        .health-badge.health-recurrent {
+            border-color:rgba(251,146,60,.55);
+            background:rgba(251,146,60,.09);
+            color:#fb923c;
+        }
+        .health-badge.health-observing {
+            border-color:rgba(250,204,21,.45);
+            background:rgba(250,204,21,.07);
+            color:#fde047;
+        }
+        .health-badge::after {
+            content:attr(data-tooltip);
+            position:absolute;
+            left:0;
+            top:calc(100% + 8px);
+            min-width:240px;
+            max-width:330px;
+            width:max-content;
+            white-space:pre-line;
+            background:#09090b;
+            color:#e4e4e7;
+            border:1px solid #3f3f46;
+            border-radius:12px;
+            padding:9px 11px;
+            font-size:.70rem;
+            line-height:1.45;
+            font-weight:500;
+            letter-spacing:0;
+            box-shadow:0 12px 30px rgba(0,0,0,.45);
+            opacity:0;
+            visibility:hidden;
+            transform:translateY(-3px);
+            pointer-events:none;
+            z-index:99999;
+        }
+        .health-badge:hover::after {
+            opacity:1;
+            visibility:visible;
+            transform:translateY(0);
+        }
+        .history-event {
+            border:1px solid #27272a;
+            border-radius:14px;
+            padding:9px 11px;
+            background:rgba(24,24,27,.45);
+        }
+
         .source-online { color:#86efac; border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
         .source-down { color:#fca5a5; border-color:rgba(239,68,68,.55); background:rgba(239,68,68,.10); }
         .source-degraded { color:#fcd34d; border-color:rgba(245,158,11,.55); background:rgba(245,158,11,.10); }
@@ -178,7 +258,7 @@
         }
         .review-btn:hover { border-color:#f97316; color:#fb923c; }
         .review-btn.danger:hover { border-color:#ef4444; color:#fca5a5; }
-        .source-subline { font-size:.72rem; color:#71717a; margin-top:4px; }
+        .source-subline { font-size:.72rem; color:#71717a; margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
         .status-warning { background-color:#f59e0b; color:#111827 !important; font-weight:800; }
         .status-disabled { background-color:#3f3f46; color:#d4d4d8 !important; font-weight:700; }
         .status-pending { background-color:#dc2626; color:#fff !important; font-weight:800; }
@@ -222,11 +302,29 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
-                    <button onclick="toggleForm()" id="toggle-form-btn"
-                            class="w-32 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
-                        <span id="form-icon">▲</span>
-                        <span id="form-text">Panel</span>
-                    </button>
+                    <div class="relative">
+                        <button onclick="togglePanel()" oncontextmenu="openPanelMenu(event)" id="toggle-form-btn"
+                                class="w-32 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium"
+                                title="Clic: mostrar/ocultar panel · Clic derecho: elegir contenido">
+                            <span id="form-icon">▼</span>
+                            <span id="form-text">Panel</span>
+                        </button>
+
+                        <div id="panel-context-menu"
+                             class="hidden absolute right-0 top-full mt-2 z-[9999] w-52 bg-zinc-950 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
+                            <button type="button" onclick="selectPanelMode('sync')"
+                                    class="w-full px-4 py-3 text-left text-sm hover:bg-zinc-900 flex items-center justify-between gap-3">
+                                <span>🔄 Verificación DTVSOL</span>
+                                <span id="panel-mode-sync-check" class="text-orange-400">✓</span>
+                            </button>
+                            <button type="button" onclick="selectPanelMode('add')"
+                                    class="w-full px-4 py-3 text-left text-sm hover:bg-zinc-900 flex items-center justify-between gap-3 border-t border-zinc-800">
+                                <span>➕ Agregar canal</span>
+                                <span id="panel-mode-add-check" class="text-orange-400 hidden">✓</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <button onclick="copyIncidentReport()" id="copy-report-btn"
                             class="w-28 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
                         <span id="copy-btn-icon">📋</span>
@@ -244,7 +342,7 @@
         </button>
 
         <!-- SINCRONIZACIÓN AUTOMÁTICA CON DTVSOL -->
-        <div class="source-sync-bar">
+        <div id="source-sync-bar" class="source-sync-bar" style="display: none;">
             <div class="source-sync-meta">
                 <div id="source-sync-dot" class="source-dot idle"></div>
                 <div>
@@ -284,6 +382,10 @@
                         <summary class="cursor-pointer px-4 py-3 font-semibold text-orange-300">Incidencias NOC <span id="noc-incidents-title"></span></summary>
                         <div id="noc-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
                     </details>
+                    <details open class="border border-amber-900/60 rounded-2xl bg-amber-950/10">
+                        <summary class="cursor-pointer px-4 py-3 font-semibold text-amber-300">Historial de hoy <span id="source-history-title"></span></summary>
+                        <div id="source-history-list" class="px-4 pb-4 text-sm text-slate-300 space-y-2"></div>
+                    </details>
                     <details class="border border-zinc-700 rounded-2xl">
                         <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en DTVSOL <span id="source-active-title"></span></summary>
                         <div id="source-active-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
@@ -297,7 +399,7 @@
         </div>
 
         <!-- FORMULARIO -->
-        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7">
+        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7" style="display: none;">
             <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
             <div class="flex gap-4">
                 <div class="w-28">
@@ -400,7 +502,8 @@
 
     let channels = [];
     let filterOnlyIncidents = false;
-    let formVisible = true;
+    let panelOpen = false;
+    let panelMode = 'sync';
     let isDarkMode = true;
     let searchQuery = '';
     let operationInProgress = false;
@@ -415,6 +518,7 @@
     const SERVICE_WORKER_PATH = './dtvsol-sw.js';
     let sourceSyncBusy = false;
     let sourceLastResult = null;
+    let sourceHistory = [];
 
     const SOURCE_COLUMNS = [
         'source_channel_id',
@@ -428,7 +532,15 @@
         'source_review_status',
         'incident_open',
         'incident_since',
-        'incident_origin'
+        'incident_origin',
+        'source_observing',
+        'source_stable_checks',
+        'source_instability',
+        'source_recurrent',
+        'source_failure_count_8h',
+        'source_change_count_30m',
+        'source_last_transition_at',
+        'source_last_stable_at'
     ];
 
     const CHANNEL_SELECT =
@@ -463,7 +575,15 @@
             source_review_status: row.source_review_status || 'none',
             incident_open: row.incident_open === true,
             incident_since: row.incident_since || null,
-            incident_origin: row.incident_origin || null
+            incident_origin: row.incident_origin || null,
+            source_observing: row.source_observing === true,
+            source_stable_checks: Number(row.source_stable_checks || 0),
+            source_instability: row.source_instability || 'normal',
+            source_recurrent: row.source_recurrent === true,
+            source_failure_count_8h: Number(row.source_failure_count_8h || 0),
+            source_change_count_30m: Number(row.source_change_count_30m || 0),
+            source_last_transition_at: row.source_last_transition_at || null,
+            source_last_stable_at: row.source_last_stable_at || null
         };
     }
 
@@ -528,6 +648,154 @@
         return `source-pill source-${state}`;
     }
 
+    function sourceHealthBadge(channel) {
+        const instability = channel.source_instability || 'normal';
+        const observing = channel.source_observing === true;
+        const recurrent = channel.source_recurrent === true;
+        const stableChecks = Math.max(0, Number(channel.source_stable_checks || 0));
+        const failures = Math.max(0, Number(channel.source_failure_count_8h || 0));
+        const changes = Math.max(0, Number(channel.source_change_count_30m || 0));
+
+        let label = '';
+        let cls = '';
+        const detail = [];
+
+        if (instability === 'flapping') {
+            label = '⚠ INESTABLE';
+            cls = 'health-unstable';
+            detail.push('FLAPPING DETECTADO');
+        } else if (instability === 'possible') {
+            label = '⚠ INESTABLE';
+            cls = 'health-unstable';
+            detail.push('POSIBLE INESTABILIDAD');
+        } else if (recurrent) {
+            label = '⚠ RECURRENTE';
+            cls = 'health-recurrent';
+            detail.push('PROBLEMAS RECURRENTES');
+        } else if (observing) {
+            label = `⏱ OBSERVACIÓN ${stableChecks}/3`;
+            cls = 'health-observing';
+            detail.push('RECUPERACIÓN EN OBSERVACIÓN');
+        } else {
+            return '';
+        }
+
+        if (observing) {
+            detail.push(`Verificaciones correctas: ${stableChecks}/3`);
+            detail.push('Se considera estable al completar 3 verificaciones consecutivas.');
+        }
+
+        if (recurrent || failures > 0) {
+            detail.push(`Caídas/reincidencias últimas 8 h: ${failures}`);
+        }
+
+        if (instability !== 'normal' || changes > 0) {
+            detail.push(`Cambios de estado últimos 30 min: ${changes}`);
+        }
+
+        if (channel.source_last_transition_at) {
+            detail.push(
+                `Último cambio: ${new Date(channel.source_last_transition_at).toLocaleTimeString('es-PE', {
+                    timeZone: 'America/Lima',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                })}`
+            );
+        }
+
+        return `<span class="health-badge ${cls}" data-tooltip="${escapeHTML(detail.join('\n'))}">${escapeHTML(label)}</span>`;
+    }
+
+    function limaDayStartIso() {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Lima',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).formatToParts(new Date());
+
+        const values = {};
+        parts.forEach(part => {
+            if (part.type !== 'literal') values[part.type] = part.value;
+        });
+
+        return new Date(
+            `${values.year}-${values.month}-${values.day}T00:00:00-05:00`
+        ).toISOString();
+    }
+
+    async function loadSourceHistory() {
+        try {
+            const { data, error } = await sb
+                .from('GPONTV_EVENTS')
+                .select(
+                    'id, channel_id, source_channel_id, channel_number, channel_name, event_type, source_state, proxies_online, proxies_total, details, created_at'
+                )
+                .gte('created_at', limaDayStartIso())
+                .order('created_at', { ascending: false })
+                .limit(500);
+
+            if (error) throw error;
+            sourceHistory = data || [];
+            return true;
+        } catch (error) {
+            console.warn('No se pudo cargar el historial DTVSOL:', error);
+            sourceHistory = [];
+            return false;
+        }
+    }
+
+    function historyEventLabel(type) {
+        const labels = {
+            down: 'CAÍDO',
+            degraded: 'DEGRADADO',
+            recovery_observed: 'EN OBSERVACIÓN',
+            stable: 'RESTABLECIDO ESTABLE',
+            reincident: 'REINCIDENCIA',
+            possible_instability: 'POSIBLE INESTABILIDAD',
+            flapping: 'FLAPPING',
+            recurrent: 'PROBLEMAS RECURRENTES'
+        };
+        return labels[type] || String(type || '').toUpperCase();
+    }
+
+    function sourceHistoryHTML() {
+        if (!sourceHistory.length) {
+            return '<div class="text-slate-500">Sin cambios registrados hoy.</div>';
+        }
+
+        return sourceHistory.map(event => {
+            const time = new Date(event.created_at).toLocaleTimeString('es-PE', {
+                timeZone: 'America/Lima',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            const availability =
+                event.proxies_online !== null &&
+                event.proxies_online !== undefined &&
+                event.proxies_total !== null &&
+                event.proxies_total !== undefined
+                    ? ` · ${event.proxies_online}/${event.proxies_total}`
+                    : '';
+
+            return `
+                <div class="history-event">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-mono text-orange-400">${escapeHTML(time)}</span>
+                        <span class="text-slate-500">·</span>
+                        <span class="font-mono text-orange-300">${escapeHTML(event.channel_number)}</span>
+                        <span class="font-semibold text-white">${escapeHTML(event.channel_name)}</span>
+                        <span class="text-xs font-bold text-amber-300">${escapeHTML(historyEventLabel(event.event_type))}${escapeHTML(availability)}</span>
+                    </div>
+                    ${event.details
+                        ? `<div class="text-xs text-slate-500 mt-1">${escapeHTML(event.details)}</div>`
+                        : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
     function formatSourceOutage(channel) {
         if (!channel.source_outage_since) return '';
         const start = new Date(channel.source_outage_since).getTime();
@@ -576,7 +844,7 @@
         if (count && (sourceLastResult?.ok || channels.some(channel => channel.source_channel_id !== null && channel.source_channel_id !== undefined))) {
             const stats = sourceInventoryStats();
             const total = sourceLastResult?.fetched ?? stats.synced.length;
-            count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS · ${stats.nocIncidents.length} INC. NOC`;
+            count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS · ${stats.nocIncidents.length} INCIDENCIAS`;
             count.className = 'source-pill source-online cursor-pointer';
         } else if (count && status === 'error') {
             count.textContent = 'SIN SINCRONIZAR';
@@ -611,7 +879,9 @@
             .join('');
     }
 
-    function openSourceInventory() {
+    async function openSourceInventory() {
+        await loadSourceHistory();
+
         const modal = document.getElementById('source-inventory-modal');
         if (!modal) return;
 
@@ -645,6 +915,10 @@
         setText('noc-incidents-title', `(${stats.nocIncidents.length})`);
         setText('source-active-title', `(${stats.active.length})`);
         setText('source-disabled-title', `(${stats.disabled.length})`);
+        setText('source-history-title', `(${sourceHistory.length})`);
+
+        const historyList = document.getElementById('source-history-list');
+        if (historyList) historyList.innerHTML = sourceHistoryHTML();
 
         const incidentList = document.getElementById('source-incidents-list');
         const nocIncidentList = document.getElementById('noc-incidents-list');
@@ -827,6 +1101,123 @@
         }
     }
 
+    async function showMonitorTransitionNotification(transition) {
+        if (!alertsEnabled() || Notification.permission !== 'granted') return;
+
+        const availability =
+            transition.online !== null &&
+            transition.online !== undefined &&
+            transition.total !== null &&
+            transition.total !== undefined
+                ? `${transition.online}/${transition.total}`
+                : 'sin disponibilidad';
+
+        const key = String(transition.id ?? transition.number);
+        let title = '';
+        let body = '';
+
+        switch (transition.type) {
+            case 'recovery_observed':
+                title = '⏱ DTVSOL · RECUPERACIÓN EN OBSERVACIÓN';
+                body =
+                    `Canal ${transition.number} · ${transition.name}\n` +
+                    `PROXIES ${availability} · Validación 1/3\n` +
+                    `Se confirmará estable tras 3 revisiones correctas.`;
+                break;
+
+            case 'stable':
+                title = '✅ DTVSOL · RESTABLECIDO ESTABLE';
+                body =
+                    `Canal ${transition.number} · ${transition.name}\n` +
+                    `PROXIES ${availability}\n` +
+                    `3 verificaciones consecutivas correctas (~30 min).`;
+                break;
+
+            case 'possible_instability':
+                title = '⚠ DTVSOL · POSIBLE INESTABILIDAD';
+                body =
+                    `Canal ${transition.number} · ${transition.name}\n` +
+                    `Volvió a caer durante la observación · PROXIES ${availability}\n` +
+                    `${transition.changeCount30m || 0} cambios recientes.`;
+                break;
+
+            case 'flapping':
+                title = '⚠ DTVSOL · FLAPPING DETECTADO';
+                body =
+                    `Canal ${transition.number} · ${transition.name}\n` +
+                    `PROXIES ${availability}\n` +
+                    `${transition.changeCount30m || 0} cambios de estado en los últimos 30 min.`;
+                break;
+
+            case 'recurrent':
+                title = '⚠ DTVSOL · PROBLEMAS RECURRENTES';
+                body =
+                    `Canal ${transition.number} · ${transition.name}\n` +
+                    `${transition.failureCount8h || 0} caídas/reincidencias en las últimas 8 h.`;
+                break;
+
+            case 'reincident':
+                title = '🚨 DTVSOL · REINCIDENCIA';
+                body =
+                    `Canal ${transition.number} · ${transition.name}\n` +
+                    `Volvió a presentar afectación · PROXIES ${availability}.`;
+                break;
+
+            default:
+                return;
+        }
+
+        const options = {
+            body,
+            tag: `dtvsol-monitor-${transition.type}-${key}-${Date.now()}`,
+            renotify: true,
+            requireInteraction: true,
+            icon: './favicon.png',
+            badge: './favicon.png',
+            data: { channel: String(transition.number), key, type: transition.type }
+        };
+
+        const registration = await getNotificationRegistration();
+        if (registration) {
+            await registration.showNotification(title, options);
+        } else {
+            new Notification(title, options);
+        }
+    }
+
+    async function processSourceTransitions(transitions = []) {
+        if (!Array.isArray(transitions) || !transitions.length) return;
+        if (!alertsEnabled() || Notification.permission !== 'granted') return;
+
+        // Si hubo varios eventos del mismo canal en una ejecución,
+        // notifica el de mayor prioridad para no saturar al NOC.
+        const priority = {
+            flapping: 60,
+            recurrent: 50,
+            possible_instability: 40,
+            reincident: 30,
+            stable: 20,
+            recovery_observed: 10
+        };
+
+        const selected = new Map();
+
+        transitions.forEach(item => {
+            if (!priority[item?.type]) return;
+
+            const key = String(item.id ?? item.number);
+            const current = selected.get(key);
+
+            if (!current || priority[item.type] > priority[current.type]) {
+                selected.set(key, item);
+            }
+        });
+
+        for (const transition of selected.values()) {
+            await showMonitorTransitionNotification(transition);
+        }
+    }
+
     async function processBrowserNotifications() {
         if (!alertsEnabled() || !('Notification' in window) || Notification.permission !== 'granted') {
             return;
@@ -847,14 +1238,17 @@
                 continue;
             }
 
+            // Un solo 3/3 NO cierra la incidencia: durante observación
+            // se conserva la marca hasta completar 3 verificaciones correctas.
+            if (channel.source_state === 'online' && channel.source_observing) {
+                continue;
+            }
+
             if (notified.has(key)) {
                 notified.delete(key);
                 changed = true;
-
-                /* Notifica recuperación únicamente cuando DTVSOL vuelve online. */
-                if (channel.source_state === 'online') {
-                    await showPersistentRecoveryNotification(channel);
-                }
+                // La notificación de recuperación definitiva la genera
+                // el evento "stable" del backend, no un único 3/3.
             }
         }
 
@@ -890,6 +1284,7 @@
             sourceLastResult = data;
             localStorage.setItem(LAST_SOURCE_CHECK_KEY, String(Date.now()));
             await loadChannels();
+            await loadSourceHistory();
 
             const attentionCount = channels.filter(needsAttention).length;
 
@@ -900,7 +1295,8 @@
 
             lastRenderedIds = '';
             renderChannels();
-            processBrowserNotifications();
+            await processSourceTransitions(data.transitions || []);
+            await processBrowserNotifications();
 
             const now = new Date();
             const time = now.toLocaleTimeString('es-PE', {
@@ -925,7 +1321,8 @@
                     `Incidencias DTVSOL: ${(data.states?.down || 0) + (data.states?.degraded || 0)}\n` +
                     `  • Caídos: ${data.states?.down || 0}\n` +
                     `  • Degradados: ${data.states?.degraded || 0}\n` +
-                    `Desactivados: ${data.states?.disabled || 0}`
+                    `Desactivados: ${data.states?.disabled || 0}\n` +
+                    `Cambios registrados: ${(data.transitions || []).length}`
                 );
             }
 
@@ -1688,16 +2085,17 @@ ${error.message}`);
                             ${escapeHTML(channel.name)}
                         </div>
                         <div class="source-subline">
-                            <span class="${sourceStateClass(channel)}">
+                            <span class="${sourceStateClass(channel)} proxy-pill">
                                 ${escapeHTML(sourceStateText(channel))}
                             </span>
+                            ${sourceHealthBadge(channel)}
                             ${stage}
                         </div>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-6 shrink-0">
-                    ${channel.incident_open && !isSourceIncident(channel) && !manualProblem
+                    ${channel.incident_open && !isSourceIncident(channel) && !manualProblem && !channel.source_observing
                         ? `<button class="source-pill source-degraded"
                                    title="DTVSOL ya recuperó. Confirma para cerrar la incidencia global."
                                    onclick='confirmNocOk(${idArgument})'>
@@ -2129,38 +2527,91 @@ ${error.message}`);
     }
 
     // ==================== UI ====================
-    function toggleForm() {
-        formVisible = !formVisible;
+    function applyPanelState() {
+        const syncBar = document.getElementById('source-sync-bar');
+        const formContainer = document.getElementById('form-container');
+        const icon = document.getElementById('form-icon');
+        const syncCheck = document.getElementById('panel-mode-sync-check');
+        const addCheck = document.getElementById('panel-mode-add-check');
 
-        const container =
-            document.getElementById(
-                'form-container'
-            );
+        // Solo se muestra el contenido elegido. Nunca ambos a la vez.
+        if (syncBar) {
+            syncBar.style.display =
+                panelOpen && panelMode === 'sync'
+                    ? 'flex'
+                    : 'none';
+        }
 
-        const icon =
-            document.getElementById(
-                'form-icon'
-            );
-
-        if (container) {
-            container.style.display =
-                formVisible
+        if (formContainer) {
+            formContainer.style.display =
+                panelOpen && panelMode === 'add'
                     ? 'block'
                     : 'none';
         }
 
         if (icon) {
-            icon.textContent =
-                formVisible
-                    ? '▲'
-                    : '▼';
+            icon.textContent = panelOpen ? '▲' : '▼';
         }
 
-        localStorage.setItem(
-            'formVisible',
-            String(formVisible)
-        );
+        if (syncCheck) {
+            syncCheck.classList.toggle('hidden', panelMode !== 'sync');
+        }
+
+        if (addCheck) {
+            addCheck.classList.toggle('hidden', panelMode !== 'add');
+        }
+
+        localStorage.setItem('panelOpen', String(panelOpen));
+        localStorage.setItem('panelMode', panelMode);
     }
+
+    function togglePanel() {
+        panelOpen = !panelOpen;
+        closePanelMenu();
+        applyPanelState();
+    }
+
+    // Compatibilidad por si algún código antiguo todavía llama toggleForm().
+    function toggleForm() {
+        togglePanel();
+    }
+
+    function openPanelMenu(event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const menu = document.getElementById('panel-context-menu');
+        if (!menu) return;
+
+        menu.classList.toggle('hidden');
+    }
+
+    function closePanelMenu() {
+        const menu = document.getElementById('panel-context-menu');
+        if (menu) menu.classList.add('hidden');
+    }
+
+    function selectPanelMode(mode) {
+        if (mode !== 'sync' && mode !== 'add') return;
+
+        panelMode = mode;
+
+        // Al elegir con clic derecho, muestra inmediatamente esa sección.
+        panelOpen = true;
+
+        closePanelMenu();
+        applyPanelState();
+    }
+
+    document.addEventListener('click', event => {
+        const menu = document.getElementById('panel-context-menu');
+        const button = document.getElementById('toggle-form-btn');
+
+        if (!menu || menu.classList.contains('hidden')) return;
+        if (menu.contains(event.target) || button?.contains(event.target)) return;
+
+        closePanelMenu();
+    });
 
     function updateFilterButton() {
         const button =
@@ -2888,37 +3339,20 @@ ${error.message}`);
             document.body.classList.remove('light');
             localStorage.setItem('theme', 'dark');
 
-            const savedForm =
-                localStorage.getItem(
-                    'formVisible'
-                );
+            const savedPanelMode =
+                localStorage.getItem('panelMode');
 
-            formVisible =
-                savedForm !== 'false';
+            panelMode =
+                savedPanelMode === 'add'
+                    ? 'add'
+                    : 'sync';
 
-            const formContainer =
-                document.getElementById(
-                    'form-container'
-                );
+            // Por defecto inicia oculto. Si el usuario ya eligió dejarlo abierto,
+            // se respeta su última preferencia.
+            panelOpen =
+                localStorage.getItem('panelOpen') === 'true';
 
-            const formIcon =
-                document.getElementById(
-                    'form-icon'
-                );
-
-            if (formContainer) {
-                formContainer.style.display =
-                    formVisible
-                        ? 'block'
-                        : 'none';
-            }
-
-            if (formIcon) {
-                formIcon.textContent =
-                    formVisible
-                        ? '▲'
-                        : '▼';
-            }
+            applyPanelState();
 
             showLoading(true);
 
@@ -2928,6 +3362,7 @@ ${error.message}`);
              * en segundo plano solo si ya corresponde la revisión de 10 minutos.
              */
             await loadChannels();
+            await loadSourceHistory();
 
             filterOnlyIncidents = channels.some(needsAttention);
             updateFilterButton();
