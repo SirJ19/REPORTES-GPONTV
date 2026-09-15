@@ -3,124 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GPON TV • Reporte NOC V7</title>
+    <title>GPON TV • Reporte NOC</title>
     <link rel="icon" type="image/png" href="./favicon.png">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap');
+
         * {
-            transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-            transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+            transition-property: color, background-color, border-color, opacity, transform;
             transition-duration: 150ms;
         }
-        .channel-card { transition: all 0.2s ease; }
-        .channel-card:hover { background-color: #1a1a1a; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        .channel-card {
+            transition: background-color .2s ease, border-color .2s ease;
+        }
+
+        .channel-card:hover {
+            background-color: #171717;
+        }
+
         .switch {
             position: relative;
             display: inline-block;
             width: 48px;
             height: 26px;
         }
-        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
         .slider {
             position: absolute;
             cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #333333;
+            inset: 0;
+            background-color: #333;
             border-radius: 9999px;
-            border: 2px solid #555555;
+            border: 2px solid #555;
         }
+
         .slider:before {
             position: absolute;
             content: "";
             height: 18px;
             width: 18px;
             left: 3px;
-            bottom: 3px;
+            bottom: 2px;
             background-color: white;
             border-radius: 50%;
+            transition: transform .15s ease;
         }
+
         input:checked + .slider {
             background-color: #22c55e;
             border-color: #22c55e;
         }
+
         input:checked + .slider:before {
             transform: translateX(22px);
         }
-        .status-ok { background-color: #22c55e; color: #ffffff !important; font-weight: 700; }
-        .status-problem { background-color: #ef4444; color: #ffffff; font-weight: 700; }
-        .status-text { font-family: 'Inter', system-ui, sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: 0.5px; }
-        .text-yes { color: #22c55e; font-weight: 700; }
-        .text-no { color: #ef4444; font-weight: 700; letter-spacing: 1px; }
-        body.light { background-color: #f8fafc; color: #0f172a; }
-        body.light .bg-black { background-color: #ffffff !important; }
-        body.light .bg-zinc-900 { background-color: #f1f5f9 !important; }
-        body.light .bg-zinc-950 { background-color: #f8fafc !important; }
-        body.light .border-zinc-800 { border-color: #e2e8f0 !important; }
-        body.light .text-slate-200 { color: #0f172a !important; }
-        body.light .text-white { color: #0f172a !important; }
-        body.light .text-slate-400 { color: #64748b !important; }
-        body.light .channel-card:hover { background-color: #f1f5f9 !important; }
 
-        /* Timer de avería */
+        .status-ok {
+            background-color: #22c55e;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .status-problem {
+            background-color: #ef4444;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .status-text {
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: .5px;
+        }
+
+        .text-yes {
+            color: #22c55e;
+            font-weight: 700;
+        }
+
+        .text-no {
+            color: #ef4444;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
         .incident-timer {
             display: inline-flex;
             align-items: center;
-            gap: 4px;
-            background: rgba(239,68,68,0.15);
-            border: 1px solid rgba(239,68,68,0.35);
+            gap: 5px;
+            background: rgba(239,68,68,.15);
+            border: 1px solid rgba(239,68,68,.38);
             border-radius: 9999px;
-            padding: 2px 10px;
+            padding: 3px 10px;
             font-family: 'Space Grotesk', monospace;
-            font-size: 0.72rem;
+            font-size: .72rem;
             font-weight: 600;
             color: #fca5a5;
-            letter-spacing: 0.5px;
             white-space: nowrap;
-            animation: pulse-border 2s ease-in-out infinite;
         }
-        @keyframes pulse-border {
-            0%, 100% { border-color: rgba(239,68,68,0.35); }
-            50% { border-color: rgba(239,68,68,0.75); }
-        }
+
         .incident-timer .dot {
             width: 5px;
             height: 5px;
             border-radius: 50%;
             background: #ef4444;
             animation: blink 1s step-start infinite;
-            flex-shrink: 0;
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-        body.light .incident-timer {
-            background: rgba(239,68,68,0.08);
-            color: #b91c1c;
         }
 
-        /* Loading overlay */
-        #loading-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 9999; backdrop-filter: blur(4px);
+        @keyframes blink {
+            0%,100% { opacity: 1; }
+            50% { opacity: .2; }
         }
-        #loading-overlay.hidden { display: none; }
+
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.68);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            backdrop-filter: blur(4px);
+        }
+
+        #loading-overlay.hidden {
+            display: none;
+        }
+
         .spinner {
-            width: 40px; height: 40px;
+            width: 40px;
+            height: 40px;
             border: 3px solid #333;
             border-top-color: #f97316;
             border-radius: 50%;
-            animation: spin 0.7s linear infinite;
+            animation: spin .7s linear infinite;
         }
-        @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* Botón limpiar búsqueda */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         .search-clear-btn {
             position: absolute;
-            right: 6px;
+            right: 7px;
             top: 50%;
             transform: translateY(-50%);
             width: 22px;
@@ -130,244 +169,33 @@
             justify-content: center;
             border-radius: 9999px;
             color: #94a3b8;
-            font-size: 0.85rem;
-            cursor: pointer;
-            background: transparent;
-            border: none;
-            line-height: 1;
+            font-size: .82rem;
         }
+
+        .search-clear-btn.visible {
+            display: flex;
+        }
+
         .search-clear-btn:hover {
-            background-color: rgba(148,163,184,0.15);
+            background: rgba(148,163,184,.15);
             color: #f97316;
         }
-        .search-clear-btn.visible { display: flex; }
 
+        @media (max-width: 980px) {
+            .channel-row {
+                flex-direction: column;
+                align-items: stretch !important;
+            }
 
-        /* ==================== GPON SOURCE MONITOR ==================== */
-        .source-sync-bar {
-            display:flex; align-items:center; justify-content:space-between; gap:14px;
-            background:#0a0a0a; border:1px solid #27272a; border-radius:24px;
-            padding:12px 16px; margin-bottom:18px;
+            .channel-controls {
+                justify-content: space-between;
+                flex-wrap: wrap;
+            }
         }
-        .source-sync-meta { display:flex; align-items:center; gap:12px; flex-wrap:wrap; flex:1; min-width:0; }
-        #source-sync-count { margin-left:auto; }
-        .source-dot { width:9px; height:9px; border-radius:9999px; flex-shrink:0; }
-        .source-dot.online { background:#22c55e; box-shadow:0 0 10px rgba(34,197,94,.5); }
-        .source-dot.syncing { background:#f59e0b; animation:blink 1s step-start infinite; }
-        .source-dot.error { background:#ef4444; }
-        .source-dot.idle { background:#71717a; }
-        .source-pill {
-            display:inline-flex; align-items:center; gap:6px; border-radius:9999px;
-            padding:4px 9px; font-size:.72rem; font-weight:700; letter-spacing:.35px;
-            border:1px solid #3f3f46; white-space:nowrap;
-        }
-        .proxy-pill {
-            padding:3px 7px;
-            font-size:.66rem;
-            gap:4px;
-            letter-spacing:.25px;
-        }
-        .source-subline {
-            display:flex;
-            align-items:center;
-            gap:6px;
-            flex-wrap:wrap;
-        }
-        .health-badge {
-            position:relative;
-            display:inline-flex;
-            align-items:center;
-            border-radius:9999px;
-            padding:3px 7px;
-            font-size:.64rem;
-            line-height:1;
-            font-weight:800;
-            letter-spacing:.25px;
-            white-space:nowrap;
-            cursor:help;
-            border:1px solid rgba(245,158,11,.48);
-            background:rgba(245,158,11,.08);
-            color:#fcd34d;
-        }
-        .health-badge.health-unstable {
-            border-color:rgba(249,115,22,.60);
-            background:rgba(249,115,22,.11);
-            color:#fdba74;
-        }
-        .health-badge.health-recurrent {
-            border-color:rgba(251,146,60,.55);
-            background:rgba(251,146,60,.09);
-            color:#fb923c;
-        }
-        .health-badge.health-observing {
-            border-color:rgba(250,204,21,.45);
-            background:rgba(250,204,21,.07);
-            color:#fde047;
-        }
-        .health-badge::after {
-            content:attr(data-tooltip);
-            position:absolute;
-            left:0;
-            top:calc(100% + 8px);
-            min-width:240px;
-            max-width:330px;
-            width:max-content;
-            white-space:pre-line;
-            background:#09090b;
-            color:#e4e4e7;
-            border:1px solid #3f3f46;
-            border-radius:12px;
-            padding:9px 11px;
-            font-size:.70rem;
-            line-height:1.45;
-            font-weight:500;
-            letter-spacing:0;
-            box-shadow:0 12px 30px rgba(0,0,0,.45);
-            opacity:0;
-            visibility:hidden;
-            transform:translateY(-3px);
-            pointer-events:none;
-            z-index:99999;
-        }
-        .health-badge:hover::after {
-            opacity:1;
-            visibility:visible;
-            transform:translateY(0);
-        }
-        .history-event {
-            border:1px solid #27272a;
-            border-radius:14px;
-            padding:9px 11px;
-            background:rgba(24,24,27,.45);
-        }
-        .channel-history-event {
-            border:1px solid #27272a;
-            border-radius:14px;
-            padding:10px 12px;
-            background:rgba(24,24,27,.48);
-        }
-        .channel-history-event + .channel-history-event {
-            margin-top:8px;
-        }
-        .channel-history-day {
-            margin-top:14px;
-        }
-        .channel-history-day:first-child {
-            margin-top:0;
-        }
-        .channel-history-day-header {
-            position:sticky;
-            top:0;
-            z-index:3;
-            display:flex;
-            align-items:center;
-            justify-content:space-between;
-            gap:12px;
-            padding:8px 10px;
-            margin-bottom:8px;
-            border:1px solid #3f3f46;
-            border-radius:12px;
-            background:rgba(9,9,11,.96);
-            backdrop-filter:blur(10px);
-        }
-        .channel-history-day-title {
-            font-size:.72rem;
-            font-weight:800;
-            letter-spacing:.35px;
-            color:#fb923c;
-            text-transform:uppercase;
-        }
-        .channel-history-day-count {
-            font-size:.68rem;
-            color:#71717a;
-            white-space:nowrap;
-        }
-        .channel-history-current {
-            border:1px solid rgba(249,115,22,.35);
-            background:rgba(249,115,22,.06);
-            border-radius:14px;
-            padding:10px 12px;
-            margin-bottom:12px;
-        }
-        .channel-history-current-title {
-            font-size:.68rem;
-            font-weight:800;
-            letter-spacing:.35px;
-            color:#fb923c;
-            text-transform:uppercase;
-        }
-        .channel-number-history {
-            appearance:none;
-            border:1px solid transparent;
-            background:transparent;
-            border-radius:14px;
-            padding:4px 8px;
-            color:inherit;
-            cursor:pointer;
-            transition:background .15s ease, border-color .15s ease, transform .15s ease;
-        }
-        .channel-number-history:hover {
-            border-color:rgba(249,115,22,.55);
-            background:rgba(249,115,22,.08);
-            transform:translateY(-1px);
-        }
-        .channel-number-history:focus-visible {
-            outline:2px solid rgba(249,115,22,.75);
-            outline-offset:2px;
-        }
-        .channel-history-analysis {
-            border:1px solid #3f3f46;
-            border-radius:16px;
-            background:rgba(24,24,27,.42);
-            padding:12px 14px;
-            margin:12px 24px 0;
-        }
-        .channel-history-analysis-title {
-            font-size:.70rem;
-            font-weight:800;
-            letter-spacing:.35px;
-            text-transform:uppercase;
-            color:#fb923c;
-        }
-        .channel-history-analysis-text {
-            margin-top:5px;
-            font-size:.75rem;
-            line-height:1.5;
-            color:#a1a1aa;
-        }
-
-
-
-
-
-        .source-online { color:#86efac; border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
-        .source-down { color:#fca5a5; border-color:rgba(239,68,68,.55); background:rgba(239,68,68,.10); }
-        .source-degraded { color:#fcd34d; border-color:rgba(245,158,11,.55); background:rgba(245,158,11,.10); }
-        .source-disabled { color:#a1a1aa; border-color:#3f3f46; background:rgba(113,113,122,.08); }
-        .source-missing, .source-unknown { color:#fdba74; border-color:rgba(249,115,22,.45); background:rgba(249,115,22,.08); }
-        .review-box {
-            margin-top:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
-            padding:8px 10px; border:1px dashed rgba(245,158,11,.55); border-radius:16px;
-            background:rgba(245,158,11,.06);
-        }
-        .review-box.review-critical { border-color:rgba(239,68,68,.6); background:rgba(239,68,68,.06); }
-        .review-btn {
-            border:1px solid #3f3f46; border-radius:9999px; padding:5px 10px;
-            font-size:.72rem; font-weight:700; background:#111; color:#e5e7eb;
-        }
-        .review-btn:hover { border-color:#f97316; color:#fb923c; }
-        .review-btn.danger:hover { border-color:#ef4444; color:#fca5a5; }
-        .source-subline { font-size:.72rem; color:#71717a; margin-top:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-        .status-warning { background-color:#f59e0b; color:#111827 !important; font-weight:800; }
-        .status-disabled { background-color:#3f3f46; color:#d4d4d8 !important; font-weight:700; }
-        .status-pending { background-color:#dc2626; color:#fff !important; font-weight:800; }
-        body.light .source-sync-bar { background:#fff !important; border-color:#e2e8f0 !important; }
-        body.light .review-box { background:rgba(245,158,11,.05); }
-        body.light .review-btn { background:#fff; color:#334155; border-color:#cbd5e1; }
-
     </style>
 </head>
-<body class="bg-black text-slate-200 min-h-screen font-sans">
+
+<body class="bg-black text-slate-200 min-h-screen">
 
     <div id="loading-overlay">
         <div class="flex flex-col items-center gap-4">
@@ -377,38 +205,41 @@
     </div>
 
     <div class="max-w-5xl mx-auto px-6 py-8">
-        <!-- HEADER -->
-        <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center justify-between mb-6 gap-5">
             <div class="flex items-center gap-4">
-                <div class="w-10 h-10 bg-orange-0 rounded-2xl flex items-center justify-center text-5xl">📺</div>
+                <div class="w-10 h-10 flex items-center justify-center text-5xl">📺</div>
                 <div>
-                    <h1 class="text-3xl font-semibold tracking-tight text-orange-500" style="text-shadow: 0 0 10px rgba(249,115,22,0.35), 0 2px 12px rgba(249,115,22,0.18);">GPON TV</h1>
+                    <h1 class="text-3xl font-semibold tracking-tight text-orange-500"
+                        style="text-shadow:0 0 10px rgba(249,115,22,.35),0 2px 12px rgba(249,115,22,.18);">
+                        GPON TV
+                    </h1>
                     <p class="text-white text-sm">NOC REPORTE DE CANALES</p>
                 </div>
             </div>
-            
-            <div id="current-datetime" class="font-mono text-lg text-slate-400 tracking-widest"></div>
-            
+
+            <div id="current-datetime"
+                 class="font-mono text-lg text-slate-400 tracking-widest hidden md:block"></div>
+
             <div class="flex items-center gap-4">
-                <div class="flex items-center gap-8">
+                <div class="flex items-center gap-7">
                     <div class="text-right">
                         <div class="text-xs text-slate-400">TOTAL</div>
                         <div id="total-channels" class="text-4xl font-semibold">0</div>
                     </div>
+
                     <div class="text-right">
                         <div class="text-xs text-slate-400">INCIDENCIAS</div>
-                        <div id="incidents-count" class="text-4xl font-semibold text-red-400">0</div>
+                        <div id="incidents-count"
+                             class="text-4xl font-semibold text-red-400">0</div>
                     </div>
                 </div>
+
                 <div class="flex items-center gap-2">
-                    <div class="relative">
-                        <button onclick="togglePanel()" id="toggle-form-btn"
-                                class="w-32 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium"
-                                title="Mostrar u ocultar panel">
-                            <span id="form-icon">▼</span>
-                            <span id="form-text">Panel</span>
-                        </button>
-                    </div>
+                    <button onclick="togglePanel()" id="toggle-form-btn"
+                            class="w-32 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
+                        <span id="form-icon">▼</span>
+                        <span>PANEL</span>
+                    </button>
 
                     <button onclick="copyIncidentReport()" id="copy-report-btn"
                             class="w-28 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium">
@@ -419,181 +250,60 @@
             </div>
         </div>
 
-        <!-- ALERTAS + MODO MANUAL -->
-        <button onclick="toggleBrowserNotifications()" id="notification-btn"
-                class="fixed top-6 right-20 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl"
-                title="Activar o desactivar alertas persistentes" aria-label="Alertas">
-            🔕
-        </button>
+        <div id="form-container"
+             class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7"
+             style="display:none;">
+            <h2 class="text-lg font-semibold mb-4 text-white">➕ Agregar nuevo canal</h2>
 
-        <button onclick="toggleManualMode()" id="manual-mode-btn"
-                class="fixed top-6 right-6 z-50 flex items-center justify-center w-12 h-12 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-2xl shadow-xl transition-colors"
-                title="DTVSOL activo · clic para activar modo manual"
-                aria-label="Modo manual">
-            ⚙️
-        </button>
-
-        <!-- SINCRONIZACIÓN AUTOMÁTICA CON DTVSOL -->
-        <div id="source-sync-bar" class="source-sync-bar" style="display: none;">
-            <div class="source-sync-meta">
-                <div id="source-sync-dot" class="source-dot idle"></div>
-                <div>
-                    <div class="text-sm font-semibold text-white">FUENTE DTVSOL</div>
-                    <div id="source-sync-label" class="text-xs text-slate-400">Esperando primera verificación…</div>
-                </div>
-                <button id="source-sync-count" type="button" onclick="openSourceInventory()"
-                        class="source-pill source-unknown cursor-pointer"
-                        title="Ver activos, inactivos, incidencias DTVSOL e incidencias NOC">SIN DATOS</button>
-            </div>
-            <div class="flex items-center gap-2">
-                <span class="source-pill source-online" title="La página verifica DTVSOL al abrir y luego cada 10 minutos">AUTO · 10 MIN</span>
-                <button id="sync-now-btn" onclick="syncFromGponSource({ manual: true })"
-                        class="text-xs px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-2xl">
-                    ↻ VERIFICAR AHORA
-                </button>
-            </div>
-        </div>
-
-        <!-- INVENTARIO DE LA FUENTE DTVSOL -->
-        <div id="source-inventory-modal" class="hidden fixed inset-0 z-[10000] bg-black/75 backdrop-blur-sm p-4" onclick="closeSourceInventory(event)">
-            <div class="max-w-4xl mx-auto mt-10 bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
-                <div class="flex items-center justify-between px-6 py-5 border-b border-zinc-800">
-                    <div>
-                        <h3 class="text-xl font-semibold text-white">Inventario DTVSOL</h3>
-                        <p id="source-inventory-subtitle" class="text-xs text-slate-400 mt-1">Resumen de la última sincronización</p>
-                    </div>
-                    <button type="button" onclick="closeSourceInventory()" class="text-2xl text-slate-400 hover:text-white">✕</button>
-                </div>
-                <div id="source-inventory-summary" class="grid grid-cols-2 md:grid-cols-6 gap-3 p-6"></div>
-                <div class="px-6 pb-6 space-y-3 max-h-[62vh] overflow-y-auto">
-                    <details open class="border border-red-900/60 rounded-2xl bg-red-950/10">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-red-300">Incidencias DTVSOL <span id="source-incidents-title"></span></summary>
-                        <div id="source-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
-                    </details>
-                    <details open class="border border-orange-900/60 rounded-2xl bg-orange-950/10">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-orange-300">Incidencias NOC <span id="noc-incidents-title"></span></summary>
-                        <div id="noc-incidents-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
-                    </details>
-                    <details open class="border border-amber-900/60 rounded-2xl bg-amber-950/10">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-amber-300">Historial de hoy <span id="source-history-title"></span></summary>
-                        <div id="source-history-list" class="px-4 pb-4 text-sm text-slate-300 space-y-2"></div>
-                    </details>
-                    <details class="border border-zinc-700 rounded-2xl">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-green-300">Activos en DTVSOL <span id="source-active-title"></span></summary>
-                        <div id="source-active-list" class="px-4 pb-4 text-sm text-slate-300 grid md:grid-cols-2 gap-2"></div>
-                    </details>
-                    <details open class="border border-zinc-700 rounded-2xl bg-zinc-900/30">
-                        <summary class="cursor-pointer px-4 py-3 font-semibold text-zinc-300">Desactivados en DTVSOL <span id="source-disabled-title"></span></summary>
-                        <div id="source-disabled-list" class="px-4 pb-4 text-sm text-slate-400 grid md:grid-cols-2 gap-2"></div>
-                    </details>
-                </div>
-            </div>
-        </div>
-
-        <!-- HISTORIAL INDIVIDUAL DEL CANAL -->
-        <div id="channel-history-modal"
-             class="hidden fixed inset-0 z-[10020] bg-black/75 backdrop-blur-sm p-4"
-             onclick="closeChannelHistory(event)">
-            <div class="max-w-2xl mx-auto mt-12 bg-zinc-950 border border-zinc-700 rounded-3xl shadow-2xl overflow-hidden"
-                 onclick="event.stopPropagation()">
-
-                <div class="flex items-start justify-between gap-4 px-6 py-5 border-b border-zinc-800">
-                    <div class="min-w-0">
-                        <div class="text-xs font-semibold tracking-wider text-orange-400 mb-1">
-                            HISTORIAL DTVSOL
-                        </div>
-                        <h3 id="channel-history-title"
-                            class="text-xl font-semibold text-white truncate">
-                            Canal
-                        </h3>
-                        <p id="channel-history-subtitle"
-                           class="text-xs text-slate-400 mt-1">
-                            Historial de hoy
-                        </p>
-                    </div>
-
-                    <button type="button"
-                            onclick="closeChannelHistory()"
-                            class="text-2xl text-slate-400 hover:text-white shrink-0">
-                        ✕
-                    </button>
-                </div>
-
-                <div id="channel-history-summary"
-                     class="grid grid-cols-2 md:grid-cols-4 gap-3 px-6 pt-5">
-                </div>
-
-                <div id="channel-history-analysis"
-                     class="channel-history-analysis">
-                </div>
-
-                <div class="px-6 py-5">
-                    <div id="channel-history-loading"
-                         class="hidden text-sm text-slate-400 py-6 text-center">
-                        Cargando historial…
-                    </div>
-
-                    <div id="channel-history-empty"
-                         class="hidden text-sm text-slate-500 py-6 text-center">
-                        No hay cambios registrados en los últimos 30 días para este canal.
-                    </div>
-
-                    <div id="channel-history-list"
-                         class="max-h-[55vh] overflow-y-auto pr-1">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- FORMULARIO -->
-        <div id="form-container" class="bg-black border border-zinc-800 rounded-3xl p-5 mb-7" style="display: none;">
-            <h2 class="text-lg font-semibold mb-4 flex items-center gap-3 text-white">➕ Agregar nuevo canal</h2>
             <div class="flex gap-4">
                 <div class="w-28">
                     <label class="block text-xs font-medium text-slate-400 mb-1">NÚMERO</label>
                     <input id="channel-number" type="text" placeholder="7"
                            class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-2xl font-mono font-bold outline-none text-center">
                 </div>
+
                 <div class="flex-1">
                     <label class="block text-xs font-medium text-slate-400 mb-1">NOMBRE DEL CANAL</label>
                     <input id="channel-name" type="text" placeholder="América TV"
                            class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-2xl px-5 py-4 text-lg outline-none">
                 </div>
+
                 <button onclick="addChannel()"
-                        class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl text-base shadow-lg">
+                        class="mt-6 bg-orange-500 hover:bg-orange-400 text-black font-bold px-8 py-4 rounded-3xl">
                     AGREGAR
                 </button>
             </div>
         </div>
 
-        <!-- LISTADO -->
-        <div class="flex justify-between items-center mb-5">
-            <h2 id="view-title" class="text-2xl font-semibold text-white">Todos los canales</h2>
-           
+        <div class="flex justify-between items-center mb-5 gap-4">
+            <h2 id="view-title" class="text-2xl font-semibold text-white">
+                Todos los canales
+            </h2>
+
             <div class="flex items-center gap-3 flex-1 justify-end">
-                <div class="relative w-64 md:w-77">
+                <div class="relative w-64">
                     <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
-                    <input
-                        id="search-input"
-                        type="text"
-                        placeholder="Buscar canal..."
-                        oninput="updateSearch(this.value)"
-                        class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-9 py-3 text-base outline-none"
-                    >
-                    <button
-                        id="search-clear-btn"
-                        type="button"
-                        class="search-clear-btn"
-                        onclick="clearSearch()"
-                        aria-label="Limpiar búsqueda"
-                        title="Limpiar búsqueda"
-                    >✕</button>
+                    <input id="search-input"
+                           type="text"
+                           placeholder="Buscar canal..."
+                           oninput="updateSearch(this.value)"
+                           class="w-full bg-zinc-950 border border-zinc-800 focus:border-orange-400 rounded-3xl pl-12 pr-9 py-3 text-base outline-none">
+
+                    <button id="search-clear-btn"
+                            type="button"
+                            class="search-clear-btn"
+                            onclick="clearSearch()"
+                            title="Limpiar búsqueda">
+                        ✕
+                    </button>
                 </div>
+
                 <button onclick="toggleFilter()" id="filter-button"
                         class="flex items-center gap-3 px-5 py-2.5 bg-zinc-950 hover:bg-orange-500/10 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
                     <span id="filter-icon">🔴</span>
                     <span id="filter-text">FILTRAR INCIDENCIAS</span>
                 </button>
+
                 <button onclick="resetAllStates()"
                         class="flex items-center gap-2 px-5 py-2.5 bg-zinc-950 hover:bg-emerald-500/10 hover:text-emerald-400 border border-zinc-800 rounded-3xl text-sm font-medium shrink-0">
                     🔄 REINICIAR ESTADO
@@ -601,38 +311,56 @@
             </div>
         </div>
 
-
         <div id="channels-list" class="space-y-2"></div>
+
         <div id="empty-state" class="hidden text-center py-16">
             <div class="text-6xl mb-4">📺</div>
-            <h3 id="empty-title" class="text-2xl font-medium text-white">No hay canales aún</h3>
-            <p id="empty-subtitle" class="text-slate-400 mt-2">Agrega canales usando el formulario superior</p>
+            <h3 id="empty-title" class="text-2xl font-medium text-white">
+                No hay canales aún
+            </h3>
+            <p id="empty-subtitle" class="text-slate-400 mt-2">
+                Agrega canales usando el panel superior
+            </p>
         </div>
     </div>
 
-    <!-- BARRA INFERIOR -->
     <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
         <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
             <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
             <span id="footer-text" class="font-medium text-sm">0 incidencias</span>
         </div>
+
         <div class="w-px h-4 bg-zinc-700"></div>
-        <div class="flex items-center gap-1.5" title="Estado de sincronización en tiempo real">
+
+        <div class="flex items-center gap-1.5" title="Estado en tiempo real">
             <div id="realtime-dot" class="w-2 h-2 rounded-full bg-yellow-400"></div>
-            <span id="realtime-label" class="text-xs text-slate-500 font-mono tracking-wide">CONECTANDO…</span>
+            <span id="realtime-label"
+                  class="text-xs text-slate-500 font-mono tracking-wide">
+                CONECTANDO…
+            </span>
         </div>
+
         <div class="w-px h-4 bg-zinc-700"></div>
-        <button onclick="exportData()" class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
+
+        <button onclick="exportData()"
+                class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
             Exportar CSV
         </button>
+
         <label class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl cursor-pointer">
             Importar CSV
-            <input type="file" id="import-file" accept=".csv" class="hidden" onchange="importCSV(this)">
+            <input type="file"
+                   id="import-file"
+                   accept=".csv"
+                   class="hidden"
+                   onchange="importCSV(this)">
         </label>
     </div>
 
-    <script>
-    // ==================== SUPABASE CONFIG ====================
+<script>
+    // ==================== SUPABASE ====================
+    // Esta web usa únicamente la base de datos del monitor.
+    // No contiene ni consulta ninguna fuente externa de canales.
     const supabaseUrl = 'https://eongnockquilwrsbcfyl.supabase.co';
     const supabaseKey = 'sb_publishable_tPgHuR7fjTFhEEX-rHk8BQ_TD15xsIf';
 
@@ -644,1657 +372,143 @@
         }
     });
 
+    const CHANNEL_SELECT =
+        'id, number, name, image, sound, incident_open, incident_since, incident_origin';
+
+
     let channels = [];
     let filterOnlyIncidents = false;
     let panelOpen = false;
-    let isDarkMode = true;
     let searchQuery = '';
     let operationInProgress = false;
-    let lastRenderedIds = '';
-    let manualMode = false;
+    let realtimeChannel = null;
 
-    // ==================== FUENTE GPON / ALERTAS ====================
-    const SOURCE_SYNC_FUNCTION = 'swift-api';
-    const SOURCE_SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutos
-    const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v2';
-    const MASS_INCIDENT_ALERT_KEY = 'gpontv_mass_incident_alert_v1';
-    const ALERTS_ENABLED_KEY = 'gpontv_alerts_enabled_v1';
-    const LAST_SOURCE_CHECK_KEY = 'gpontv_last_dtvsol_check_v1';
-    const MANUAL_MODE_KEY = 'gpontv_manual_mode_v1';
-    const SERVICE_WORKER_PATH = './dtvsol-sw.js';
-    let sourceSyncBusy = false;
-    let sourceLastResult = null;
-    let sourceHistory = [];
-    let activeHistoryChannelId = null;
-
-    const SOURCE_COLUMNS = [
-        'source_channel_id',
-        'source_run',
-        'source_state',
-        'source_stage',
-        'source_proxies_online',
-        'source_proxies_total',
-        'source_last_checked',
-        'source_outage_since',
-        'source_review_status',
-        'incident_open',
-        'incident_since',
-        'incident_origin',
-        'source_observing',
-        'source_stable_checks',
-        'source_instability',
-        'source_recurrent',
-        'source_failure_count_8h',
-        'source_change_count_30m',
-        'source_last_transition_at',
-        'source_last_stable_at'
-    ];
-
-    const CHANNEL_SELECT =
-        'id, number, name, image, sound, ' +
-        SOURCE_COLUMNS.join(', ');
+    function escapeHTML(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
 
     function mapRowToChannel(row) {
         return {
             id: row.id,
-            number: row.number,
-            name: row.name,
+            number: row.number ?? '',
+            name: row.name ?? '',
             image: row.image !== false,
             sound: row.sound !== false,
-            source_channel_id: row.source_channel_id ?? null,
-            source_run: row.source_run ?? null,
-            source_state: row.source_state || 'unknown',
-            source_stage: row.source_stage || '',
-            source_proxies_online:
-                row.source_proxies_online === null ||
-                row.source_proxies_online === undefined ||
-                row.source_proxies_online === ''
-                    ? null
-                    : Number(row.source_proxies_online),
-            source_proxies_total:
-                row.source_proxies_total === null ||
-                row.source_proxies_total === undefined ||
-                row.source_proxies_total === ''
-                    ? null
-                    : Number(row.source_proxies_total),
-            source_last_checked: row.source_last_checked || null,
-            source_outage_since: row.source_outage_since || null,
-            source_review_status: row.source_review_status || 'none',
             incident_open: row.incident_open === true,
             incident_since: row.incident_since || null,
-            incident_origin: row.incident_origin || null,
-            source_observing: row.source_observing === true,
-            source_stable_checks: Number(row.source_stable_checks || 0),
-            source_instability: row.source_instability || 'normal',
-            source_recurrent: row.source_recurrent === true,
-            source_failure_count_8h: Number(row.source_failure_count_8h || 0),
-            source_change_count_30m: Number(row.source_change_count_30m || 0),
-            source_last_transition_at: row.source_last_transition_at || null,
-            source_last_stable_at: row.source_last_stable_at || null
+            incident_origin: row.incident_origin || null
         };
     }
 
-    function hasManualProblem(channel) {
+    function hasProblem(channel) {
         return !channel.image || !channel.sound;
     }
 
-    function isSourceCritical(channel) {
-        return channel.source_state === 'down';
-    }
+    function sortChannels() {
+        channels.sort((a, b) => {
+            const na = Number(a.number);
+            const nb = Number(b.number);
 
-    function isSourceDegraded(channel) {
-        return channel.source_state === 'degraded';
-    }
-
-    function isSourceIncident(channel) {
-        return isSourceCritical(channel) || isSourceDegraded(channel);
-    }
-
-    function isSourceMissing(channel) {
-        return channel.source_state === 'missing';
-    }
-
-    function isIncident(channel) {
-        if (manualMode) {
-            return hasManualProblem(channel);
-        }
-
-        return Boolean(channel.incident_open) || hasManualProblem(channel) || isSourceIncident(channel);
-    }
-
-    function needsAttention(channel) {
-        return isIncident(channel);
-    }
-
-    function sourceStateText(channel) {
-        const online = channel.source_proxies_online;
-        const total = channel.source_proxies_total;
-        const availability =
-            online !== null && total !== null
-                ? ` ${online}/${total}`
-                : '';
-
-        /* El texto es neutro; el color indica estado DTVSOL. */
-        const labels = {
-            online: `PROXIES${availability}`,
-            down: `PROXIES${availability}`,
-            degraded: `PROXIES${availability}`,
-            disabled: 'PROXIES OFF',
-            missing: 'PROXIES ?',
-            unknown: 'PROXIES ?'
-        };
-
-        return labels[channel.source_state] || labels.unknown;
-    }
-
-    function manualIssueText(channel) {
-        const issues = [];
-        if (!channel.image) issues.push('SIN IMAGEN');
-        if (!channel.sound) issues.push('SIN AUDIO');
-        return issues.join(' + ');
-    }
-
-    function sourceStateClass(channel) {
-        const state = channel.source_state || 'unknown';
-        return `source-pill source-${state}`;
-    }
-
-    function sourceHealthBadge(channel) {
-        const instability = channel.source_instability || 'normal';
-        const observing = channel.source_observing === true;
-        const recurrent = channel.source_recurrent === true;
-        const stableChecks = Math.max(0, Number(channel.source_stable_checks || 0));
-        const failures = Math.max(0, Number(channel.source_failure_count_8h || 0));
-        const changes = Math.max(0, Number(channel.source_change_count_30m || 0));
-        const sourceOnline = channel.source_state === 'online';
-
-        const availability =
-            channel.source_proxies_online !== null &&
-            channel.source_proxies_online !== undefined &&
-            channel.source_proxies_total !== null &&
-            channel.source_proxies_total !== undefined
-                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                : null;
-
-        const lastChange = channel.source_last_transition_at
-            ? new Date(channel.source_last_transition_at).toLocaleTimeString('es-PE', {
-                timeZone: 'America/Lima',
-                hour: '2-digit',
-                minute: '2-digit'
-            })
-            : null;
-
-        let label = '';
-        let cls = '';
-        const detail = [];
-
-        /*
-         * OBSERVACIÓN describe lo que está pasando AHORA, por eso tiene
-         * prioridad visual sobre el antecedente de inestabilidad.
-         */
-        if (observing) {
-            label = `⏱ RECUPERACIÓN ${stableChecks} DE 3`;
-            cls = 'health-observing';
-
-            detail.push('RECUPERACIÓN EN OBSERVACIÓN');
-            detail.push('El canal está operativo, pero todavía no se confirma estable.');
-
-            if (instability === 'flapping') {
-                detail.push('Antecedente: flapping detectado recientemente.');
-            } else if (instability === 'possible') {
-                detail.push('Antecedente: presentó inestabilidad recientemente.');
+            if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) {
+                return na - nb;
             }
 
-            if (availability) detail.push(`Estado actual: ${availability}`);
-            detail.push(`Validación: ${stableChecks}/3`);
-            detail.push('Solo cuenta una revisión nueva si pasó ~10 min.');
-            detail.push('Después de estabilizarse, se mantiene 1 hora en seguimiento.');
-
-        } else if (instability === 'flapping') {
-            label = sourceOnline
-                ? '⚠ FLAPPING RECIENTE'
-                : '⚠ INESTABLE';
-            cls = 'health-unstable';
-
-            if (sourceOnline) {
-                detail.push('FLAPPING RECIENTE');
-                detail.push('El canal está operativo ahora, pero presentó oscilaciones entre caído y operativo recientemente.');
-                detail.push('Seguimiento activo: desaparecerá tras 1 hora sin nuevas caídas.');
-            } else {
-                detail.push('FLAPPING DETECTADO');
-                detail.push('El canal está alternando entre caído y operativo.');
-            }
-
-            if (availability) detail.push(`Estado actual: ${availability}`);
-            if (changes > 0) detail.push(`Cambios recientes: ${changes} en 30 min`);
-            if (lastChange) detail.push(`Último cambio: ${lastChange}`);
-
-        } else if (instability === 'possible') {
-            label = sourceOnline
-                ? '⚠ INESTABLE RECIENTE'
-                : '⚠ INESTABLE';
-            cls = 'health-unstable';
-
-            if (sourceOnline) {
-                detail.push('INESTABILIDAD RECIENTE');
-                detail.push('El canal está operativo ahora, pero levantó y volvió a caer recientemente.');
-                detail.push('Seguimiento activo: desaparecerá tras 1 hora sin nuevas caídas.');
-            } else {
-                detail.push('POSIBLE INESTABILIDAD');
-                detail.push('El canal levantó, pero volvió a caer poco después.');
-            }
-
-            if (availability) detail.push(`Estado actual: ${availability}`);
-            if (changes > 0) detail.push(`Cambios recientes: ${changes} en 30 min`);
-            if (lastChange) detail.push(`Último cambio: ${lastChange}`);
-
-        } else if (recurrent) {
-            label = '⚠ RECURRENTE';
-            cls = 'health-recurrent';
-
-            detail.push('PROBLEMAS RECURRENTES');
-            detail.push('El canal ha presentado varias fallas durante las últimas 8 h.');
-
-            if (failures > 0) detail.push(`Caídas/reincidencias: ${failures}`);
-            if (availability) detail.push(`Estado actual: ${availability}`);
-            if (lastChange) detail.push(`Último cambio: ${lastChange}`);
-
-        } else {
-            return '';
-        }
-
-        return `<span class="health-badge ${cls}" data-tooltip="${escapeHTML(detail.join('\n'))}">${escapeHTML(label)}</span>`;
-    }
-
-    function limaDayStartIso() {
-        const parts = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'America/Lima',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-        }).formatToParts(new Date());
-
-        const values = {};
-        parts.forEach(part => {
-            if (part.type !== 'literal') values[part.type] = part.value;
+            return String(a.number).localeCompare(
+                String(b.number),
+                'es',
+                { numeric: true }
+            );
         });
+    }
 
+    function setText(id, value) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value;
+    }
+
+    function nowLima() {
         return new Date(
-            `${values.year}-${values.month}-${values.day}T00:00:00-05:00`
-        ).toISOString();
-    }
-
-    function channelHistorySummaryCard(label, value, tone = 'text-white') {
-        return `
-            <div class="border border-zinc-800 rounded-2xl bg-zinc-900/30 px-3 py-3">
-                <div class="text-[10px] uppercase tracking-wider text-zinc-500">${escapeHTML(label)}</div>
-                <div class="mt-1 font-semibold ${tone}">${escapeHTML(value)}</div>
-            </div>
-        `;
-    }
-
-    function limaDateParts(value) {
-        const parts = new Intl.DateTimeFormat('es-PE', {
-            timeZone: 'America/Lima',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            weekday: 'long'
-        }).formatToParts(new Date(value));
-
-        const result = {};
-        parts.forEach(part => {
-            if (part.type !== 'literal') result[part.type] = part.value;
-        });
-
-        return result;
-    }
-
-    function limaDateKey(value) {
-        const parts = limaDateParts(value);
-        return `${parts.year}-${parts.month}-${parts.day}`;
-    }
-
-    function limaDateLabel(value) {
-        const parts = limaDateParts(value);
-        const eventKey = `${parts.year}-${parts.month}-${parts.day}`;
-        const todayKey = limaDateKey(new Date());
-        const yesterdayKey = limaDateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
-
-        const weekday = String(parts.weekday || '')
-            .replace(/^./, char => char.toUpperCase());
-
-        const date = `${parts.day}/${parts.month}/${parts.year}`;
-
-        if (eventKey === todayKey) return `HOY · ${weekday} ${date}`;
-        if (eventKey === yesterdayKey) return `AYER · ${weekday} ${date}`;
-
-        return `${weekday} ${date}`;
-    }
-
-    function channelHistoryStartIso(days = 30) {
-        return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    }
-
-    function renderChannelHistoryGrouped(events) {
-        const groups = new Map();
-
-        events.forEach(event => {
-            const key = limaDateKey(event.created_at);
-            if (!groups.has(key)) groups.set(key, []);
-            groups.get(key).push(event);
-        });
-
-        return Array.from(groups.values()).map(dayEvents => {
-            const first = dayEvents[0];
-            const dayLabel = limaDateLabel(first.created_at);
-
-            const eventHtml = dayEvents.map(event => {
-                const time = new Date(event.created_at).toLocaleTimeString('es-PE', {
-                    timeZone: 'America/Lima',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                });
-
-                const availabilityEvent =
-                    event.proxies_online !== null &&
-                    event.proxies_online !== undefined &&
-                    event.proxies_total !== null &&
-                    event.proxies_total !== undefined
-                        ? `${event.proxies_online}/${event.proxies_total}`
-                        : '—';
-
-                const description = channelHistoryEventDescription(event);
-
-                return `
-                    <div class="channel-history-event">
-                        <div class="flex items-center justify-between gap-3 flex-wrap">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <span class="font-mono text-orange-400">${escapeHTML(time)}</span>
-                                <span class="text-xs font-bold text-amber-300">
-                                    ${escapeHTML(historyEventLabel(event.event_type))}
-                                </span>
-                            </div>
-
-                            <span class="source-pill ${event.source_state ? `source-${escapeHTML(event.source_state)}` : 'source-unknown'}">
-                                ${escapeHTML(availabilityEvent)}
-                            </span>
-                        </div>
-
-                        ${description
-                            ? `<div class="text-xs text-slate-400 mt-2">${escapeHTML(description)}</div>`
-                            : ''}
-                    </div>
-                `;
-            }).join('');
-
-            return `
-                <section class="channel-history-day">
-                    <div class="channel-history-day-header">
-                        <span class="channel-history-day-title">${escapeHTML(dayLabel)}</span>
-                        <span class="channel-history-day-count">
-                            ${dayEvents.length} ${dayEvents.length === 1 ? 'evento' : 'eventos'}
-                        </span>
-                    </div>
-                    ${eventHtml}
-                </section>
-            `;
-        }).join('');
-    }
-
-    function channelHistoryAnalysisHTML(channel) {
-        const availability =
-            channel.source_proxies_online !== null &&
-            channel.source_proxies_online !== undefined &&
-            channel.source_proxies_total !== null &&
-            channel.source_proxies_total !== undefined
-                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                : '—';
-
-        const failures = Number(channel.source_failure_count_8h || 0);
-        const changes = Number(channel.source_change_count_30m || 0);
-        const checks = Number(channel.source_stable_checks || 0);
-
-        let title = 'SIN INESTABILIDAD ACTIVA';
-        let description =
-            `Estado actual ${availability}. No hay una condición de inestabilidad activa en seguimiento.`;
-
-        if (channel.source_observing) {
-            title = `RECUPERACIÓN EN SEGUIMIENTO · ${checks} DE 3`;
-            description =
-                `El canal está operativo (${availability}), pero todavía no se confirma estable. ` +
-                `Solo cuenta una nueva validación aproximadamente cada 10 minutos. ` +
-                `Si vuelve a caer antes de completar 3 validaciones correctas, el conteo se reinicia.`;
-        } else if (channel.source_instability === 'flapping') {
-            title = channel.source_state === 'online'
-                ? 'FLAPPING RECIENTE · EN SEGUIMIENTO'
-                : 'FLAPPING DETECTADO';
-            description =
-                channel.source_state === 'online'
-                    ? `El canal está operativo ahora (${availability}), pero presentó oscilaciones repetidas entre caído y operativo. ` +
-                      `La advertencia permanecerá hasta completar 1 hora sin nuevas caídas.`
-                    : `El canal está alternando repetidamente entre caído y operativo. Estado actual: ${availability}.`;
-        } else if (channel.source_instability === 'possible') {
-            title = channel.source_state === 'online'
-                ? 'INESTABILIDAD RECIENTE · EN SEGUIMIENTO'
-                : 'POSIBLE INESTABILIDAD';
-            description =
-                channel.source_state === 'online'
-                    ? `El canal está operativo ahora (${availability}), pero levantó y volvió a caer recientemente. ` +
-                      `La advertencia permanecerá hasta completar 1 hora sin nuevas caídas.`
-                    : `Se detectó una recuperación transitoria seguida de una nueva caída. Estado actual: ${availability}.`;
-        } else if (channel.source_recurrent) {
-            title = 'PROBLEMAS RECURRENTES';
-            description =
-                `El canal registra ${failures} caídas/reincidencias durante las últimas 8 horas. ` +
-                `Estado actual: ${availability}.`;
-        }
-
-        const extras = [];
-        if (changes > 0) extras.push(`${changes} cambios de estado en 30 min`);
-        if (failures > 0) extras.push(`${failures} fallas/reincidencias en 8 h`);
-
-        return `
-            <div class="channel-history-analysis-title">${escapeHTML(title)}</div>
-            <div class="channel-history-analysis-text">
-                ${escapeHTML(description)}
-                ${extras.length ? `<div class="mt-2 text-zinc-500">${escapeHTML(extras.join(' · '))}</div>` : ''}
-            </div>
-        `;
-    }
-
-    function channelHistoryEventDescription(event) {
-        const descriptions = {
-            down: 'Se detectó caída del canal.',
-            degraded: 'Se detectó degradación de disponibilidad.',
-            recovery_observed: 'Verificación correcta durante el período de recuperación.',
-            stable: 'Completó las verificaciones consecutivas y quedó restablecido estable.',
-            reincident: 'El canal volvió a caer después de una recuperación estable.',
-            possible_instability: 'Levantó temporalmente y volvió a caer poco después.',
-            flapping: 'Se detectó oscilación repetida entre operativo y caído.',
-            recurrent: 'Se detectaron múltiples fallas dentro de la ventana de 8 horas.'
-        };
-
-        return event.details || descriptions[event.event_type] || '';
-    }
-
-    async function openChannelHistory(channelId) {
-        if (manualMode) return;
-
-        activeHistoryChannelId = channelId;
-
-        const channel = channels.find(item => String(item.id) === String(channelId));
-        if (!channel) return;
-
-        const modal = document.getElementById('channel-history-modal');
-        const title = document.getElementById('channel-history-title');
-        const subtitle = document.getElementById('channel-history-subtitle');
-        const summary = document.getElementById('channel-history-summary');
-        const analysis = document.getElementById('channel-history-analysis');
-        const list = document.getElementById('channel-history-list');
-        const loading = document.getElementById('channel-history-loading');
-        const empty = document.getElementById('channel-history-empty');
-
-        if (!modal || !title || !summary || !analysis || !list || !loading || !empty) return;
-
-        title.textContent = `${channel.number} · ${channel.name}`;
-
-        const lastCheckedText = channel.source_last_checked
-            ? new Date(channel.source_last_checked).toLocaleTimeString('es-PE', {
-                timeZone: 'America/Lima',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            })
-            : 'sin datos';
-
-        if (subtitle) {
-            subtitle.textContent =
-                `Últimos 30 días · Última verificación DTVSOL: ${lastCheckedText}`;
-        }
-
-        const availability =
-            channel.source_proxies_online !== null &&
-            channel.source_proxies_online !== undefined &&
-            channel.source_proxies_total !== null &&
-            channel.source_proxies_total !== undefined
-                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                : '?';
-
-        const instability =
-            channel.source_observing
-                ? `RECUPERACIÓN ${channel.source_stable_checks || 0} DE 3`
-                : channel.source_instability === 'flapping'
-                    ? (channel.source_state === 'online' ? 'FLAPPING RECIENTE' : 'FLAPPING')
-                    : channel.source_instability === 'possible'
-                        ? (channel.source_state === 'online' ? 'INEST. RECIENTE' : 'POSIBLE INEST.')
-                        : channel.source_recurrent
-                            ? 'RECURRENTE'
-                            : 'NORMAL';
-
-        summary.innerHTML =
-            channelHistorySummaryCard('PROXIES', availability, 'text-orange-300') +
-            channelHistorySummaryCard('ESTADO', sourceStateText(channel), 'text-white') +
-            channelHistorySummaryCard(
-                'CONDICIÓN',
-                instability,
-                instability === 'NORMAL' ? 'text-green-300' : 'text-amber-300'
-            ) +
-            channelHistorySummaryCard(
-                'FALLAS 8H',
-                String(channel.source_failure_count_8h || 0),
-                Number(channel.source_failure_count_8h || 0) > 0
-                    ? 'text-red-300'
-                    : 'text-slate-300'
-            );
-
-        analysis.innerHTML = channelHistoryAnalysisHTML(channel);
-
-        modal.classList.remove('hidden');
-        list.innerHTML = '';
-        empty.classList.add('hidden');
-        loading.classList.remove('hidden');
-
-        try {
-            let query = sb
-                .from('GPONTV_EVENTS')
-                .select(
-                    'id, channel_id, source_channel_id, channel_number, channel_name, event_type, source_state, proxies_online, proxies_total, details, created_at'
-                )
-                .gte('created_at', channelHistoryStartIso(30))
-                .order('created_at', { ascending: false })
-                .limit(1000);
-
-            if (channel.source_channel_id !== null && channel.source_channel_id !== undefined) {
-                query = query.eq('source_channel_id', channel.source_channel_id);
-            } else {
-                query = query.eq('channel_id', channel.id);
-            }
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            const events = data || [];
-            loading.classList.add('hidden');
-
-            if (!events.length) {
-                empty.classList.add('hidden');
-            }
-
-            const currentAvailability =
-                channel.source_proxies_online !== null &&
-                channel.source_proxies_online !== undefined &&
-                channel.source_proxies_total !== null &&
-                channel.source_proxies_total !== undefined
-                    ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                    : '—';
-
-            const currentCheckTime = channel.source_last_checked
-                ? new Date(channel.source_last_checked).toLocaleTimeString('es-PE', {
-                    timeZone: 'America/Lima',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                })
-                : '—';
-
-            const currentCondition =
-                channel.source_observing
-                    ? `RECUPERACIÓN ${channel.source_stable_checks || 0} DE 3`
-                    : channel.source_state === 'online'
-                        ? 'SIN CAMBIO DE ESTADO'
-                        : sourceStateText(channel);
-
-            const currentSnapshot = `
-                <div class="channel-history-current">
-                    <div class="flex items-center justify-between gap-3 flex-wrap">
-                        <div>
-                            <div class="channel-history-current-title">ÚLTIMA VERIFICACIÓN DTVSOL</div>
-                            <div class="mt-1 flex items-center gap-2 flex-wrap">
-                                <span class="font-mono text-orange-400">${escapeHTML(currentCheckTime)}</span>
-                                <span class="text-xs font-bold text-slate-300">${escapeHTML(currentCondition)}</span>
-                            </div>
-                        </div>
-                        <span class="${sourceStateClass(channel)}">
-                            ${escapeHTML(currentAvailability)}
-                        </span>
-                    </div>
-                    <div class="text-xs text-slate-500 mt-2">
-                        Esta línea muestra el chequeo más reciente aunque no haya ocurrido un cambio de estado.
-                    </div>
-                </div>
-            `;
-
-            list.innerHTML = currentSnapshot + renderChannelHistoryGrouped(events);
-
-        } catch (error) {
-            console.error('Error cargando historial del canal:', error);
-            loading.classList.add('hidden');
-            empty.classList.remove('hidden');
-            empty.textContent = 'No se pudo cargar el historial del canal.';
-        }
-    }
-
-    function closeChannelHistory(event) {
-        if (event && event.target !== event.currentTarget) return;
-
-        const modal = document.getElementById('channel-history-modal');
-        if (modal) modal.classList.add('hidden');
-
-        activeHistoryChannelId = null;
-    }
-
-    async function loadSourceHistory() {
-        try {
-            const { data, error } = await sb
-                .from('GPONTV_EVENTS')
-                .select(
-                    'id, channel_id, source_channel_id, channel_number, channel_name, event_type, source_state, proxies_online, proxies_total, details, created_at'
-                )
-                .gte('created_at', limaDayStartIso())
-                .order('created_at', { ascending: false })
-                .limit(500);
-
-            if (error) throw error;
-            sourceHistory = data || [];
-            return true;
-        } catch (error) {
-            console.warn('No se pudo cargar el historial DTVSOL:', error);
-            sourceHistory = [];
-            return false;
-        }
-    }
-
-    function historyEventLabel(type) {
-        const labels = {
-            down: 'CAÍDO',
-            degraded: 'DEGRADADO',
-            recovery_observed: 'EN OBSERVACIÓN',
-            stable: 'RESTABLECIDO ESTABLE',
-            reincident: 'REINCIDENCIA',
-            possible_instability: 'POSIBLE INESTABILIDAD',
-            flapping: 'FLAPPING',
-            recurrent: 'PROBLEMAS RECURRENTES'
-        };
-        return labels[type] || String(type || '').toUpperCase();
-    }
-
-    function sourceHistoryHTML() {
-        if (!sourceHistory.length) {
-            return '<div class="text-slate-500">Sin cambios registrados hoy.</div>';
-        }
-
-        return sourceHistory.map(event => {
-            const time = new Date(event.created_at).toLocaleTimeString('es-PE', {
-                timeZone: 'America/Lima',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            const availability =
-                event.proxies_online !== null &&
-                event.proxies_online !== undefined &&
-                event.proxies_total !== null &&
-                event.proxies_total !== undefined
-                    ? ` · ${event.proxies_online}/${event.proxies_total}`
-                    : '';
-
-            return `
-                <div class="history-event">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="font-mono text-orange-400">${escapeHTML(time)}</span>
-                        <span class="text-slate-500">·</span>
-                        <span class="font-mono text-orange-300">${escapeHTML(event.channel_number)}</span>
-                        <span class="font-semibold text-white">${escapeHTML(event.channel_name)}</span>
-                        <span class="text-xs font-bold text-amber-300">${escapeHTML(historyEventLabel(event.event_type))}${escapeHTML(availability)}</span>
-                    </div>
-                    ${event.details
-                        ? `<div class="text-xs text-slate-500 mt-1">${escapeHTML(event.details)}</div>`
-                        : ''}
-                </div>
-            `;
-        }).join('');
-    }
-
-    function formatSourceOutage(channel) {
-        if (!channel.source_outage_since) return '';
-        const start = new Date(channel.source_outage_since).getTime();
-        if (!Number.isFinite(start)) return '';
-        return formatDuration((Date.now() - start) / 1000);
-    }
-
-    function sourceInventoryStats() {
-        const synced = channels.filter(channel => {
-            return channel.source_channel_id !== null &&
-                channel.source_channel_id !== undefined &&
-                channel.source_state !== 'missing';
-        });
-
-        const disabled = synced.filter(channel => {
-            return channel.source_run === false || channel.source_state === 'disabled';
-        });
-
-        const active = synced.filter(channel => {
-            return channel.source_run === true && channel.source_state !== 'disabled';
-        });
-
-        const incidents = active.filter(isSourceIncident);
-        const nocIncidents = channels.filter(hasManualProblem);
-        const online = active.filter(channel => channel.source_state === 'online');
-
-        return {
-            synced,
-            active,
-            disabled,
-            incidents,
-            nocIncidents,
-            online,
-            monitorTotal: channels.length
-        };
-    }
-
-    function setSourceSyncStatus(status, details = '') {
-        const dot = document.getElementById('source-sync-dot');
-        const label = document.getElementById('source-sync-label');
-        const count = document.getElementById('source-sync-count');
-
-        if (dot) dot.className = `source-dot ${status}`;
-        if (label) label.textContent = details;
-
-        if (count && (sourceLastResult?.ok || channels.some(channel => channel.source_channel_id !== null && channel.source_channel_id !== undefined))) {
-            const stats = sourceInventoryStats();
-            const total = sourceLastResult?.fetched ?? stats.synced.length;
-            count.textContent = `${total} DTVSOL · ${stats.active.length} ACTIVOS · ${stats.disabled.length} INACTIVOS · ${stats.nocIncidents.length} INCIDENCIAS`;
-            count.className = 'source-pill source-online cursor-pointer';
-        } else if (count && status === 'error') {
-            count.textContent = 'SIN SINCRONIZAR';
-            count.className = 'source-pill source-down cursor-pointer';
-        }
-    }
-
-    function sourceListHTML(list, includeState = false) {
-        if (!list.length) {
-            return '<div class="text-slate-500 col-span-full">Ninguno.</div>';
-        }
-
-        return list
-            .slice()
-            .sort((a, b) => String(a.number).localeCompare(String(b.number), 'es', { numeric: true }))
-            .map(channel => {
-                const availability =
-                    channel.source_proxies_online !== null &&
-                    channel.source_proxies_total !== null
-                        ? ` · ${channel.source_proxies_online}/${channel.source_proxies_total}`
-                        : '';
-                const state = includeState
-                    ? ` · ${channel.source_state === 'down' ? 'CAÍDO' : 'DEGRADADO'}${availability}`
-                    : '';
-
-                return `<div class="rounded-xl border border-zinc-800 px-3 py-2">` +
-                    `<span class="font-mono text-orange-400">${escapeHTML(channel.number)}</span> · ` +
-                    `<span>${escapeHTML(channel.name)}</span>` +
-                    `<span class="text-xs text-slate-500">${escapeHTML(state)}</span>` +
-                    `</div>`;
-            })
-            .join('');
-    }
-
-    async function openSourceInventory() {
-        await loadSourceHistory();
-
-        const modal = document.getElementById('source-inventory-modal');
-        if (!modal) return;
-
-        const stats = sourceInventoryStats();
-        const total = sourceLastResult?.fetched ?? stats.synced.length;
-        const summary = document.getElementById('source-inventory-summary');
-        const checkedAt = sourceLastResult?.checkedAt
-            ? new Date(sourceLastResult.checkedAt).toLocaleString('es-PE')
-            : 'sin fecha';
-
-        if (summary) {
-            const cards = [
-                ['DTVSOL', total, 'text-white'],
-                ['ACTIVOS', stats.active.length, 'text-green-400'],
-                ['INACTIVOS', stats.disabled.length, 'text-zinc-400'],
-                ['INC. DTVSOL', stats.incidents.length, 'text-red-400'],
-                ['INC. NOC', stats.nocIncidents.length, 'text-orange-400'],
-                ['EN MONITOR', stats.monitorTotal, 'text-orange-400']
-            ];
-
-            summary.innerHTML = cards.map(([label, value, cls]) => `
-                <div class="bg-black border border-zinc-800 rounded-2xl p-3 text-center">
-                    <div class="text-[11px] text-slate-500">${label}</div>
-                    <div class="text-2xl font-bold ${cls}">${value}</div>
-                </div>
-            `).join('');
-        }
-
-        setText('source-inventory-subtitle', `Última sincronización: ${checkedAt}`);
-        setText('source-incidents-title', `(${stats.incidents.length})`);
-        setText('noc-incidents-title', `(${stats.nocIncidents.length})`);
-        setText('source-active-title', `(${stats.active.length})`);
-        setText('source-disabled-title', `(${stats.disabled.length})`);
-        setText('source-history-title', `(${sourceHistory.length})`);
-
-        const historyList = document.getElementById('source-history-list');
-        if (historyList) historyList.innerHTML = sourceHistoryHTML();
-
-        const incidentList = document.getElementById('source-incidents-list');
-        const nocIncidentList = document.getElementById('noc-incidents-list');
-        const activeList = document.getElementById('source-active-list');
-        const disabledList = document.getElementById('source-disabled-list');
-
-        if (incidentList) incidentList.innerHTML = sourceListHTML(stats.incidents, true);
-
-        if (nocIncidentList) {
-            nocIncidentList.innerHTML = stats.nocIncidents.length
-                ? stats.nocIncidents
-                    .slice()
-                    .sort((a, b) => String(a.number).localeCompare(String(b.number), 'es', { numeric: true }))
-                    .map(channel =>
-                        `<div class="rounded-xl border border-zinc-800 px-3 py-2">` +
-                        `<span class="font-mono text-orange-400">${escapeHTML(channel.number)}</span> · ` +
-                        `<span>${escapeHTML(channel.name)}</span>` +
-                        `<span class="text-xs text-slate-500"> · ${escapeHTML(manualIssueText(channel))}</span>` +
-                        `</div>`
-                    )
-                    .join('')
-                : '<div class="text-slate-500 col-span-full">Ninguno.</div>';
-        }
-
-        if (activeList) activeList.innerHTML = sourceListHTML(stats.active, false);
-        if (disabledList) disabledList.innerHTML = sourceListHTML(stats.disabled, false);
-
-        modal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeSourceInventory(event) {
-        if (event && event.target?.id !== 'source-inventory-modal') return;
-        const modal = document.getElementById('source-inventory-modal');
-        if (modal) modal.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-
-    function notificationSet() {
-        try {
-            return new Set(
-                JSON.parse(
-                    localStorage.getItem(NOTIFIED_OUTAGES_KEY) || '[]'
-                )
-            );
-        } catch (_) {
-            return new Set();
-        }
-    }
-
-    function saveNotificationSet(set) {
-        localStorage.setItem(
-            NOTIFIED_OUTAGES_KEY,
-            JSON.stringify(Array.from(set))
+            new Date().toLocaleString(
+                'en-US',
+                { timeZone: 'America/Lima' }
+            )
         );
     }
 
-    function alertsEnabled() {
-        const saved = localStorage.getItem(ALERTS_ENABLED_KEY);
-        if (saved === null) {
-            return 'Notification' in window && Notification.permission === 'granted';
-        }
-        return saved === 'true';
+    function updateClock() {
+        const now = nowLima();
+        const pad = value => String(value).padStart(2, '0');
+
+        setText(
+            'current-datetime',
+            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ` +
+            `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+        );
     }
 
-    async function getNotificationRegistration() {
-        if (!('serviceWorker' in navigator) || !window.isSecureContext) return null;
-        try {
-            return await navigator.serviceWorker.register(SERVICE_WORKER_PATH);
-        } catch (error) {
-            console.warn('No se pudo registrar el Service Worker de alertas:', error);
-            return null;
+    function formatDurationFromMs(milliseconds) {
+        const totalMinutes = Math.max(
+            0,
+            Math.floor(milliseconds / 60000)
+        );
+
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+
+        const parts = [];
+
+        if (days > 0) parts.push(`${days}d`);
+        if (hours > 0) parts.push(`${hours}h`);
+
+        if (days === 0 && hours === 0) {
+            parts.push(`${minutes}m`);
+        } else if (days === 0 && minutes > 0) {
+            parts.push(`${minutes}m`);
         }
+
+        return parts.join(' ');
     }
 
-    async function toggleBrowserNotifications() {
-        if (!('Notification' in window)) {
-            alert('Este navegador no admite notificaciones.');
-            return;
-        }
-        if (!window.isSecureContext) {
-            alert('Las notificaciones requieren HTTPS.');
-            return;
+    function incidentDuration(channel) {
+        if (!hasProblem(channel) || !channel.incident_since) {
+            return '';
         }
 
-        if (alertsEnabled()) {
-            localStorage.setItem(ALERTS_ENABLED_KEY, 'false');
-            const registration = await getNotificationRegistration();
-            if (registration) {
-                const active = await registration.getNotifications();
-                active.forEach(item => item.close());
-            }
-            updateNotificationButton();
-            return;
-        }
+        const start = new Date(channel.incident_since).getTime();
+        if (!Number.isFinite(start)) return '';
 
-        const permission = Notification.permission === 'granted'
-            ? 'granted'
-            : await Notification.requestPermission();
-
-        if (permission === 'granted') {
-            localStorage.setItem(ALERTS_ENABLED_KEY, 'true');
-            await getNotificationRegistration();
-            updateNotificationButton();
-            processBrowserNotifications();
-            await processMassIncidentNotification(
-                channels.filter(isIncident).length
-            );
-        } else {
-            localStorage.setItem(ALERTS_ENABLED_KEY, 'false');
-            updateNotificationButton();
-        }
+        return formatDurationFromMs(Date.now() - start);
     }
 
-    function updateNotificationButton() {
-        const button = document.getElementById('notification-btn');
-        if (!button || !('Notification' in window)) return;
+    function buildTimerHTML(channel) {
+        const duration = incidentDuration(channel);
+        if (!duration) return '';
 
-        const enabled = alertsEnabled() && Notification.permission === 'granted';
-        button.textContent = enabled ? '🔔' : '🔕';
-        button.title = enabled
-            ? 'Alertas persistentes activas · clic para desactivar'
-            : Notification.permission === 'denied'
-                ? 'Alertas bloqueadas por el navegador'
-                : 'Alertas desactivadas · clic para activar';
-        button.classList.toggle('text-green-400', enabled);
-        button.classList.toggle('border-green-700', enabled);
+        return `
+            <span class="incident-timer"
+                  data-timer-id="${escapeHTML(channel.id)}">
+                <span class="dot"></span>
+                ${escapeHTML(duration)}
+            </span>
+        `;
     }
 
-    async function showPersistentIncidentNotification(channel) {
-        if (!alertsEnabled() || Notification.permission !== 'granted') return;
-
-        const availability =
-            channel.source_proxies_online !== null &&
-            channel.source_proxies_total !== null
-                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                : 'sin disponibilidad';
-        const impact = channel.source_state === 'down' ? 'CAÍDO' : 'DEGRADADO';
-        const key = String(channel.source_channel_id ?? channel.id);
-        const options = {
-            body: `Canal ${channel.number} · ${channel.name}\n${impact} DTVSOL · Disponibilidad: ${availability}`,
-            tag: `dtvsol-incident-${key}`,
-            renotify: true,
-            requireInteraction: true,
-            icon: './favicon.png',
-            badge: './favicon.png',
-            data: { channel: String(channel.number), key }
-        };
-
-        const registration = await getNotificationRegistration();
-        if (registration) {
-            await registration.showNotification('🚨 DTVSOL · INCIDENCIA', options);
-        } else {
-            new Notification('🚨 DTVSOL · INCIDENCIA', options);
-        }
-    }
-
-
-    async function showPersistentRecoveryNotification(channel) {
-        if (!alertsEnabled() || Notification.permission !== 'granted') return;
-
-        const availability =
-            channel.source_proxies_online !== null &&
-            channel.source_proxies_total !== null
-                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
-                : 'sin disponibilidad';
-        const key = String(channel.source_channel_id ?? channel.id);
-        const options = {
-            body: `Canal ${channel.number} · ${channel.name}\nDTVSOL RESTABLECIDO · Disponibilidad: ${availability}`,
-            tag: `dtvsol-recovery-${key}-${Date.now()}`,
-            renotify: true,
-            requireInteraction: true,
-            icon: './favicon.png',
-            badge: './favicon.png',
-            data: { channel: String(channel.number), key, type: 'recovered' }
-        };
-
-        const registration = await getNotificationRegistration();
-        if (registration) {
-            await registration.showNotification('✅ DTVSOL · CANAL RESTABLECIDO', options);
-        } else {
-            new Notification('✅ DTVSOL · CANAL RESTABLECIDO', options);
-        }
-    }
-
-    async function showMonitorTransitionNotification(transition) {
-        if (!alertsEnabled() || Notification.permission !== 'granted') return;
-
-        const availability =
-            transition.online !== null &&
-            transition.online !== undefined &&
-            transition.total !== null &&
-            transition.total !== undefined
-                ? `${transition.online}/${transition.total}`
-                : 'sin disponibilidad';
-
-        const key = String(transition.id ?? transition.number);
-        let title = '';
-        let body = '';
-
-        switch (transition.type) {
-            case 'recovery_observed':
-                title = '⏱ DTVSOL · RECUPERACIÓN EN OBSERVACIÓN';
-                body =
-                    `Canal ${transition.number} · ${transition.name}\n` +
-                    `PROXIES ${availability} · Observación 1/3\n` +
-                    `Una verificación cada 10 min. Se confirmará estable tras 3 controles consecutivos.`;
-                break;
-
-            case 'stable':
-                title = '✅ DTVSOL · RESTABLECIDO ESTABLE';
-                body =
-                    `Canal ${transition.number} · ${transition.name}\n` +
-                    `PROXIES ${availability}\n` +
-                    `3 verificaciones consecutivas correctas (~30 min).`;
-                break;
-
-            case 'possible_instability':
-                title = '⚠ DTVSOL · POSIBLE INESTABILIDAD';
-                body =
-                    `Canal ${transition.number} · ${transition.name}\n` +
-                    `Recuperación transitoria seguida de una nueva caída · PROXIES ${availability}\n` +
-                    `Posible flapping: ${transition.changeCount30m || 0} cambios recientes.`;
-                break;
-
-            case 'flapping':
-                title = '⚠ DTVSOL · FLAPPING DETECTADO';
-                body =
-                    `Canal ${transition.number} · ${transition.name}\n` +
-                    `El canal se cae y levanta repetidamente · PROXIES ${availability}\n` +
-                    `${transition.changeCount30m || 0} cambios de estado en los últimos 30 min.`;
-                break;
-
-            case 'recurrent':
-                title = '⚠ DTVSOL · PROBLEMAS RECURRENTES';
-                body =
-                    `Canal ${transition.number} · ${transition.name}\n` +
-                    `${transition.failureCount8h || 0} caídas/reincidencias en las últimas 8 h.`;
-                break;
-
-            case 'reincident':
-                title = '🚨 DTVSOL · REINCIDENCIA';
-                body =
-                    `Canal ${transition.number} · ${transition.name}\n` +
-                    `Volvió a presentar afectación · PROXIES ${availability}.`;
-                break;
-
-            default:
-                return;
-        }
-
-        const options = {
-            body,
-            tag: `dtvsol-monitor-${transition.type}-${key}-${Date.now()}`,
-            renotify: true,
-            requireInteraction: true,
-            icon: './favicon.png',
-            badge: './favicon.png',
-            data: { channel: String(transition.number), key, type: transition.type }
-        };
-
-        const registration = await getNotificationRegistration();
-        if (registration) {
-            await registration.showNotification(title, options);
-        } else {
-            new Notification(title, options);
-        }
-    }
-
-    async function processSourceTransitions(transitions = []) {
-        if (manualMode) return;
-        if (!Array.isArray(transitions) || !transitions.length) return;
-        if (!alertsEnabled() || Notification.permission !== 'granted') return;
-
-        // Si hubo varios eventos del mismo canal en una ejecución,
-        // notifica el de mayor prioridad para no saturar al NOC.
-        const priority = {
-            flapping: 60,
-            recurrent: 50,
-            possible_instability: 40,
-            reincident: 30,
-            stable: 20,
-            recovery_observed: 10
-        };
-
-        const selected = new Map();
-
-        transitions.forEach(item => {
-            if (!priority[item?.type]) return;
-
-            const key = String(item.id ?? item.number);
-            const current = selected.get(key);
-
-            if (!current || priority[item.type] > priority[current.type]) {
-                selected.set(key, item);
-            }
-        });
-
-        for (const transition of selected.values()) {
-            await showMonitorTransitionNotification(transition);
-        }
-    }
-
-    async function processMassIncidentNotification(incidentCount) {
-        const count = Number(incidentCount || 0);
-        const wasActive =
-            localStorage.getItem(MASS_INCIDENT_ALERT_KEY) === 'true';
-
-        // Al bajar nuevamente a 6 o menos, se rearma la alerta.
-        if (count <= 6) {
-            if (wasActive) {
-                localStorage.setItem(MASS_INCIDENT_ALERT_KEY, 'false');
-            }
-            return;
-        }
-
-        if (wasActive) return;
-        if (!alertsEnabled() || Notification.permission !== 'granted') return;
-
-        const affected = channels
-            .filter(isIncident)
-            .slice(0, 6)
-            .map(channel => `${channel.number} ${channel.name}`)
-            .join(', ');
-
-        const options = {
-            body:
-                `${count} canales presentan incidencia activa.\n` +
-                `${affected}${count > 6 ? '…' : ''}`,
-            tag: 'gpontv-mass-incidents',
-            renotify: true,
-            requireInteraction: true,
-            icon: './favicon.png',
-            badge: './favicon.png',
-            data: { type: 'mass-incidents', count }
-        };
-
-        const registration = await getNotificationRegistration();
-
-        if (registration) {
-            await registration.showNotification(
-                '🚨 NOC · MÚLTIPLES INCIDENCIAS',
-                options
-            );
-        } else {
-            new Notification(
-                '🚨 NOC · MÚLTIPLES INCIDENCIAS',
-                options
-            );
-        }
-
-        localStorage.setItem(MASS_INCIDENT_ALERT_KEY, 'true');
-    }
-
-    async function processBrowserNotifications() {
-        if (manualMode) return;
-
-        if (!alertsEnabled() || !('Notification' in window) || Notification.permission !== 'granted') {
-            return;
-        }
-
-        const notified = notificationSet();
-        let changed = false;
-
-        for (const channel of channels) {
-            const key = String(channel.source_channel_id ?? channel.id);
-
-            if (isSourceIncident(channel)) {
-                if (!notified.has(key)) {
-                    notified.add(key);
-                    changed = true;
-                    await showPersistentIncidentNotification(channel);
-                }
-                continue;
-            }
-
-            // Un solo 3/3 NO cierra la incidencia: durante observación
-            // se conserva la marca hasta completar 3 verificaciones correctas.
-            if (channel.source_state === 'online' && channel.source_observing) {
-                continue;
-            }
-
-            if (notified.has(key)) {
-                notified.delete(key);
-                changed = true;
-                // La notificación de recuperación definitiva la genera
-                // el evento "stable" del backend, no un único 3/3.
-            }
-        }
-
-        if (changed) saveNotificationSet(notified);
-    }
-
-    async function syncFromGponSource(options = {}) {
-        const { manual = false, initial = false } = options;
-
-        if (manualMode) {
-            if (manual) {
-                alert('Modo manual activo. Activa DTVSOL con el botón ⚙️ para verificar la fuente.');
-            }
-            return false;
-        }
-
-        if (sourceSyncBusy) return false;
-
-        sourceSyncBusy = true;
-        setSourceSyncStatus('syncing', 'Verificando DTVSOL…');
-
-        const button = document.getElementById('sync-now-btn');
-        if (button) button.disabled = true;
-
-        try {
-            const { data, error } = await sb.functions.invoke(
-                SOURCE_SYNC_FUNCTION,
-                {
-                    headers: {
-                        apikey: supabaseKey
-                    },
-                    body: { requestedAt: new Date().toISOString() }
-                }
-            );
-
-            if (error) throw error;
-            if (!data?.ok) {
-                throw new Error(data?.error || 'La fuente DTVSOL no respondió correctamente.');
-            }
-
-            sourceLastResult = data;
-            localStorage.setItem(LAST_SOURCE_CHECK_KEY, String(Date.now()));
-            await loadChannels();
-            await loadSourceHistory();
-
-            // Si un operador tiene abierto el historial de un canal,
-            // se refresca automáticamente con el resultado del nuevo chequeo.
-            const historyModal = document.getElementById('channel-history-modal');
-            if (
-                activeHistoryChannelId !== null &&
-                historyModal &&
-                !historyModal.classList.contains('hidden')
-            ) {
-                await openChannelHistory(activeHistoryChannelId);
-            }
-
-            const attentionCount = channels.filter(needsAttention).length;
-
-            if (initial) {
-                filterOnlyIncidents = attentionCount > 0;
-                updateFilterButton();
-            }
-
-            lastRenderedIds = '';
-            renderChannels();
-            await processSourceTransitions(data.transitions || []);
-            await processBrowserNotifications();
-
-            const now = new Date();
-            const time = now.toLocaleTimeString('es-PE', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-
-            setSourceSyncStatus(
-                'online',
-                `Última verificación DTVSOL ${time}`
-            );
-
-            if (sourceAutoTimer) scheduleNextSourceCheck();
-
-            if (manual) {
-                alert(
-                    `Sincronización DTVSOL completada.\n\n` +
-                    `Canales en DTVSOL: ${data.fetched}\n` +
-                    `Nuevos agregados: ${data.inserted || 0}\n` +
-                    `Actualizados: ${data.updated || 0}\n` +
-                    `Incidencias DTVSOL: ${(data.states?.down || 0) + (data.states?.degraded || 0)}\n` +
-                    `  • Caídos: ${data.states?.down || 0}\n` +
-                    `  • Degradados: ${data.states?.degraded || 0}\n` +
-                    `Desactivados: ${data.states?.disabled || 0}\n` +
-                    `Cambios registrados: ${(data.transitions || []).length}`
-                );
-            }
-
-            return true;
-        } catch (error) {
-            console.error('DTVSOL source sync error:', error);
-
-            let detail = error?.message || String(error);
-            let status = null;
-
-            // Supabase FunctionsHttpError conserva la respuesta HTTP en context.
-            // Intentamos leerla para mostrar el motivo REAL (401/404/500, secreto, migración, etc.).
-            try {
-                const response = error?.context;
-                if (response && typeof response.clone === 'function') {
-                    status = response.status || null;
-                    const copy = response.clone();
-                    const contentType = copy.headers?.get?.('content-type') || '';
-                    if (contentType.includes('application/json')) {
-                        const body = await copy.json();
-                        if (body?.error) detail = body.error;
-                        else if (body?.message) detail = body.message;
-                    } else {
-                        const text = await copy.text();
-                        if (text && text.length < 800) detail = text;
-                    }
-                }
-            } catch (readError) {
-                console.warn('No se pudo leer detalle de Edge Function:', readError);
-            }
-
-            let hint = '';
-            if (status === 401 || /jwt|unauthorized|authorization/i.test(detail)) {
-                hint = 'La función está exigiendo JWT. Desactiva Verify JWT para swift-api (verify_jwt = false).';
-            } else if (status === 404 || /not found/i.test(detail)) {
-                hint = 'La Edge Function swift-api no está desplegada con ese nombre.';
-            } else if (/GPON_ADMIN_CHANNELS_URL/i.test(detail)) {
-                hint = 'Falta configurar el Secret GPON_ADMIN_CHANNELS_URL con la URL completa y un token válido.';
-            } else if (/migraci|column|source_state|source_channel_id/i.test(detail)) {
-                hint = 'Falta ejecutar la migración SQL del monitor en Supabase.';
-            } else if (/No se encontraron canales|token pudo vencer/i.test(detail)) {
-                hint = 'La función sí llegó a DTVSOL, pero el token venció o DTVSOL devolvió una página distinta.';
-            } else if (/Failed to send a request|fetch/i.test(detail)) {
-                hint = 'El navegador no pudo alcanzar la Edge Function. Revisa que esté desplegada y accesible.';
-            }
-
-            const statusText = status ? `HTTP ${status} · ` : '';
-            setSourceSyncStatus('error', `DTVSOL: ${statusText}${detail}`);
-
-            if (manual) {
-                alert(
-                    'No se pudo sincronizar con DTVSOL.\n\n' +
-                    `${statusText}${detail}` +
-                    (hint ? `\n\nSOLUCIÓN: ${hint}` : '')
-                );
-            }
-
-            return false;
-        } finally {
-            sourceSyncBusy = false;
-            if (button) button.disabled = false;
-        }
-    }
-
-    async function reviewSourceIssue(id, mode) {
-        const channel = channels.find(item => String(item.id) === String(id));
-        if (!channel) return;
-
-        const now = new Date().toISOString();
-        const fields = {
-            source_review_status: 'confirmed',
-            incident_open: true,
-            incident_since: channel.incident_since || now,
-            incident_origin: channel.incident_origin || 'dtvsol'
-        };
-
-        if (mode === 'image') fields.image = false;
-        if (mode === 'sound') fields.sound = false;
-        if (mode === 'both') {
-            fields.image = false;
-            fields.sound = false;
-        }
-
-        const success = await updateChannelInDB(channel.id, fields);
-        if (!success) {
-            alert('No se pudo guardar la revisión.');
-            return;
-        }
-
-        Object.assign(channel, fields);
-        lastRenderedIds = '';
-        renderChannels();
-    }
-
-
-    // ==================== TIMER DE AVERÍA ====================
-    const incidentStart = {};
-    const LS_KEY = 'gpontv_incident_starts';
-
-    function lsGetAll() {
-        try {
-            return JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-        } catch (error) {
-            console.warn('No se pudo leer el temporizador local:', error);
-            return {};
-        }
-    }
-
-    function lsSaveAll(obj) {
-        try {
-            localStorage.setItem(LS_KEY, JSON.stringify(obj));
-        } catch (error) {
-            console.warn('No se pudo guardar el temporizador local:', error);
-        }
-    }
-
-    function lsSetTimer(id, timestamp) {
-        const obj = lsGetAll();
-        obj[String(id)] = timestamp;
-        lsSaveAll(obj);
-    }
-
-    function lsClearTimer(id) {
-        const obj = lsGetAll();
-        delete obj[String(id)];
-        lsSaveAll(obj);
-    }
-
-    function lsClearAllTimers() {
-        localStorage.removeItem(LS_KEY);
-    }
-
-    function formatDuration(seconds) {
-        const safeSeconds = Math.max(0, Number(seconds) || 0);
-        const totalMinutes = Math.floor(safeSeconds / 60);
-
-        if (totalMinutes < 1) return '< 1m';
-
-        if (safeSeconds < 3600) {
-            return `${totalMinutes}m`;
-        }
-
-        if (safeSeconds < 86400) {
-            const hours = Math.floor(safeSeconds / 3600);
-            const minutes = Math.floor((safeSeconds % 3600) / 60);
-
-            return minutes > 0
-                ? `${hours}h ${minutes}m`
-                : `${hours}h`;
-        }
-
-        const days = Math.floor(safeSeconds / 86400);
-        const hours = Math.floor((safeSeconds % 86400) / 3600);
-
-        return hours > 0
-            ? `${days}d ${hours}h`
-            : `${days}d`;
-    }
-
-    function tickTimers() {
-        const now = Date.now();
-
-        document.querySelectorAll('[data-timer-id]').forEach(element => {
-            const start = Number(element.dataset.incidentStart || 0);
-            if (start > 0) {
-                element.textContent = formatDuration((now - start) / 1000);
-            }
-        });
-    }
-
-    /*
-     * V7: el inicio de avería es GLOBAL y vive en Supabase (incident_since).
-     * Ya no se inicia/cierra con localStorage por navegador.
-     */
-    function syncIncidentStart(channel) {
-        const id = String(channel.id);
-        delete incidentStart[id];
-        lsClearTimer(id);
-    }
-
-    // ==================== ESTADO DE CARGA ====================
-    function showLoading(show) {
-        const overlay = document.getElementById('loading-overlay');
-
-        if (overlay) {
-            overlay.classList.toggle('hidden', !show);
-        }
-    }
-
-    async function withLock(fn) {
-        if (operationInProgress) return;
-
-        operationInProgress = true;
-        showLoading(true);
-
-        try {
-            return await fn();
-        } catch (error) {
-            console.error('Error inesperado:', error);
-
-            alert(
-                `Ocurrió un error inesperado:\n` +
-                `${error.message || error}`
-            );
-
-            return null;
-        } finally {
-            operationInProgress = false;
-            showLoading(false);
-        }
-    }
-
-    // ==================== ACTUALIZACIONES DIFERIDAS ====================
-    const pendingUpdates = {};
-
-    function debouncedUpdate(id, fields, delayMs = 400) {
-        const key = String(id);
-
-        if (pendingUpdates[key]) {
-            clearTimeout(pendingUpdates[key].timer);
-            Object.assign(pendingUpdates[key].fields, fields);
-        } else {
-            pendingUpdates[key] = {
-                fields: { ...fields },
-                timer: null
-            };
-        }
-
-        pendingUpdates[key].timer = setTimeout(async () => {
-            const updateFields = pendingUpdates[key].fields;
-
-            delete pendingUpdates[key];
-
-            const success = await updateChannelInDB(
-                id,
-                updateFields
-            );
-
-            if (!success) {
-                await loadChannels();
-
-                lastRenderedIds = '';
-                renderChannels();
-
-                alert(
-                    'No se pudo guardar el cambio. ' +
-                    'Se restauró el estado de la base de datos.'
-                );
-            }
-        }, delayMs);
-    }
-
-    // ==================== SUPABASE ====================
     async function loadChannels() {
-        let data = null;
-        let error = null;
-
-        ({ data, error } = await sb
-            .from('GPONTV')
-            .select(CHANNEL_SELECT)
-            .order('number', { ascending: true }));
-
-        /*
-         * Compatibilidad temporal: si todavía no se ejecutó la migración
-         * de columnas GPON, la página sigue funcionando en modo manual.
-         */
-        if (error) {
-            const firstError = error;
-
-            ({ data, error } = await sb
-                .from('GPONTV')
-                .select('id, number, name, image, sound')
-                .order('number', { ascending: true }));
-
-            if (!error) {
-                console.warn(
-                    'GPON source columns unavailable. Manual fallback active:',
-                    firstError
-                );
-            }
-        }
-
-        if (error) {
-            console.error('Load error:', error);
-            alert(`No se pudieron cargar los canales:
-${error.message}`);
-            channels = [];
-            return false;
-        }
-
-        channels = (data || []).map(mapRowToChannel);
-        channels.forEach(syncIncidentStart);
-        return true;
-    }
-
-    async function insertChannel(number, name) {
-        const payload = {
-            number: String(number).trim(),
-            name: String(name).trim(),
-            image: true,
-            sound: true
-        };
-
-        /*
-         * No se envía incident_since.
-         * Así el registro funciona aunque esa columna no exista.
-         */
         const { data, error } = await sb
             .from('GPONTV')
-            .insert([payload])
-            .select('id, number, name, image, sound')
-            .single();
+            .select(CHANNEL_SELECT)
+            .order('number', { ascending: true });
 
-        if (error) {
-            console.error('Insert error:', error);
+        if (error) throw error;
 
-            let message = error.message;
-
-            if (error.code === '23505') {
-                message =
-                    `Ya existe un canal con el número ` +
-                    `${payload.number}.`;
-            } else if (error.code === '42501') {
-                message =
-                    'Supabase bloqueó el registro por las ' +
-                    'políticas RLS de la tabla GPONTV.';
-            }
-
-            alert(
-                `No se pudo agregar el canal:\n${message}`
-            );
-
-            return null;
-        }
-
-        return data;
+        channels = (data || []).map(mapRowToChannel);
+        sortChannels();
     }
 
     async function updateChannelInDB(id, fields) {
@@ -2304,256 +518,36 @@ ${error.message}`);
             .eq('id', id);
 
         if (error) {
-            console.error('Update error:', error);
+            console.error(error);
             return false;
         }
 
         return true;
     }
 
-    async function deleteChannelFromDB(id) {
-        const { error } = await sb
-            .from('GPONTV')
-            .delete()
-            .eq('id', id);
-
-        if (error) {
-            console.error('Delete error:', error);
-
-            alert(
-                `No se pudo eliminar el canal:\n` +
-                `${error.message}`
-            );
-
-            return false;
-        }
-
-        return true;
-    }
-
-    async function resetAllInDB() {
-        if (channels.length === 0) return true;
-
-        const ids = channels.map(channel => channel.id);
-        const { error } = await sb
-            .from('GPONTV')
-            .update({ image: true, sound: true })
-            .in('id', ids);
-
-        if (error) {
-            console.error('Reset error:', error);
-            alert(`No se pudieron reiniciar los canales:\n${error.message}`);
-            return false;
-        }
-
-        const closableIds = channels
-            .filter(channel => !isSourceIncident(channel))
-            .map(channel => channel.id);
-
-        if (closableIds.length > 0) {
-            const { error: closeError } = await sb
-                .from('GPONTV')
-                .update({
-                    incident_open: false,
-                    incident_since: null,
-                    incident_origin: null,
-                    source_review_status: 'none'
-                })
-                .in('id', closableIds);
-
-            if (closeError) {
-                console.error('Reset close incident error:', closeError);
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    // ==================== REINICIAR ESTADOS ====================
-    async function resetAllStates() {
-        if (channels.length === 0) {
-            alert('No hay canales para reiniciar.');
-            return;
-        }
-
-        const accepted = confirm(
-            '¿Reiniciar todos los estados?\n' +
-            'Todos pasarán a ESTABLE ' +
-            '(Imagen y Audio: SÍ)'
-        );
-
-        if (!accepted) return;
-
-        await withLock(async () => {
-            const success = await resetAllInDB();
-
-            if (!success) return;
-
-            channels.forEach(channel => {
-                channel.image = true;
-                channel.sound = true;
-                if (!isSourceIncident(channel)) {
-                    channel.incident_open = false;
-                    channel.incident_since = null;
-                    channel.incident_origin = null;
-                    channel.source_review_status = 'none';
-                }
-            });
-
-            lsClearAllTimers();
-
-            Object.keys(incidentStart).forEach(key => {
-                delete incidentStart[key];
-            });
-
-            lastRenderedIds = '';
-            renderChannels();
-        });
-    }
-
-    // ==================== COPIAR REPORTE ====================
-    function copyIncidentReport() {
-        // Reporte NOC clásico: únicamente validación manual de IMAGEN/AUDIO.
-        // DTVSOL, flapping, recurrencia y observación NO se copian.
-        const problemChannels = channels.filter(
-            channel => !channel.image || !channel.sound
-        );
-
-        if (problemChannels.length === 0) {
-            alert('No hay incidencias activas para reportar.');
-            return;
-        }
-
-        const now = new Date(
-            new Date().toLocaleString('en-US', { timeZone: 'America/Lima' })
-        );
-        const pad = value => String(value).padStart(2, '0');
-        const dateStr =
-            `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ` +
-            `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
-        const lines = [
-            '🚨 REPORTE DE CANALES CON INCIDENCIAS 🚨',
-            'LIMA / CUSCO / ICA',
-            `Fecha: ${dateStr}`,
-            `Incidencias detectadas: ${problemChannels.length}`,
-            ''
-        ];
-
-        problemChannels.forEach(channel => {
-            const issues = [];
-
-            if (!channel.image) issues.push('Sin Imagen');
-            if (!channel.sound) issues.push('Sin Audio');
-
-            const globalStartRaw = channel.incident_since
-                ? new Date(channel.incident_since).getTime()
-                : null;
-
-            const start = Number.isFinite(globalStartRaw)
-                ? globalStartRaw
-                : null;
-
-            const duration = start
-                ? ` - ${formatDuration((Date.now() - start) / 1000)}`
-                : '';
-
-            lines.push(
-                `CANAL ${channel.number} – ${String(channel.name).toUpperCase()} ` +
-                `(${issues.join(', ')})${duration}`
-            );
-        });
-
-        const report = lines.join('\n');
-
-        const markAsCopied = () => {
-            const button = document.getElementById('copy-report-btn');
-            const icon = document.getElementById('copy-btn-icon');
-            const text = document.getElementById('copy-btn-text');
-
-            if (icon) icon.textContent = '✅';
-            if (text) text.textContent = 'COPIADO';
-            if (button) button.classList.add(
-                'border-orange-500',
-                'text-orange-400',
-                'bg-orange-500/10'
-            );
-
-            setTimeout(() => {
-                if (icon) icon.textContent = '📋';
-                if (text) text.textContent = 'COPIAR';
-                if (button) button.classList.remove(
-                    'border-orange-500',
-                    'text-orange-400',
-                    'bg-orange-500/10'
-                );
-            }, 1500);
-        };
-
-        if (navigator.clipboard && window.isSecureContext) {
-            navigator.clipboard.writeText(report)
-                .then(markAsCopied)
-                .catch(() => fallbackCopy(report, markAsCopied));
-        } else {
-            fallbackCopy(report, markAsCopied);
-        }
-    }
-
-    function fallbackCopy(text, onSuccess) {
-        const textarea =
-            document.createElement('textarea');
-
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        textarea.style.pointerEvents = 'none';
-
-        document.body.appendChild(textarea);
-
-        textarea.focus();
-        textarea.select();
-
-        try {
-            document.execCommand('copy');
-
-            if (typeof onSuccess === 'function') {
-                onSuccess();
-            }
-        } catch (error) {
-            console.error('Copy error:', error);
-
-            alert(
-                'No se pudo copiar el reporte automáticamente.'
-            );
-        } finally {
-            document.body.removeChild(textarea);
-        }
-    }
-
-    // ==================== RENDER ====================
     function renderChannels() {
         sortChannels();
 
         const container = document.getElementById('channels-list');
         const empty = document.getElementById('empty-state');
-        if (!container || !empty) return;
 
         let displayed = filterOnlyIncidents
-            ? channels.filter(isIncident)
+            ? channels.filter(hasProblem)
             : [...channels];
 
         if (searchQuery) {
             displayed = displayed.filter(channel => {
                 const number = String(channel.number).toLowerCase();
                 const name = String(channel.name).toLowerCase();
-                return number.includes(searchQuery) || name.includes(searchQuery);
+
+                return (
+                    number.includes(searchQuery) ||
+                    name.includes(searchQuery)
+                );
             });
         }
 
-        const incidentCount = channels.filter(isIncident).length;
-
-        void processMassIncidentNotification(incidentCount);
+        const incidentCount = channels.filter(hasProblem).length;
 
         setText('total-channels', channels.length);
         setText('incidents-count', incidentCount);
@@ -2561,9 +555,10 @@ ${error.message}`);
 
         const footerDot = document.getElementById('footer-dot');
         if (footerDot) {
-            footerDot.className = incidentCount > 0
-                ? 'w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse'
-                : 'w-3.5 h-3.5 bg-orange-500 rounded-full';
+            footerDot.className =
+                incidentCount > 0
+                    ? 'w-3.5 h-3.5 bg-red-500 rounded-full animate-pulse'
+                    : 'w-3.5 h-3.5 bg-orange-500 rounded-full';
         }
 
         setText(
@@ -2573,7 +568,9 @@ ${error.message}`);
                 : `Todos los canales (${channels.length})`
         );
 
-        if (displayed.length === 0) {
+        updateFilterButton();
+
+        if (!displayed.length) {
             container.innerHTML = '';
             empty.classList.remove('hidden');
 
@@ -2592,184 +589,57 @@ ${error.message}`);
                     ? 'Prueba con otro número o nombre'
                     : filterOnlyIncidents
                         ? 'Todos los canales están estables ✔'
-                        : 'Agrega canales usando el formulario superior'
+                        : 'Agrega canales usando el panel superior'
             );
 
-            lastRenderedIds = '';
             return;
         }
 
         empty.classList.add('hidden');
+        container.innerHTML = '';
 
-        const idFingerprint = `${manualMode ? 'manual' : 'dtvsol'}|` + displayed
-            .map(channel => [
-                channel.id,
-                channel.number,
-                channel.name,
-                channel.image,
-                channel.sound,
-                channel.source_state,
-                channel.source_proxies_online,
-                channel.source_proxies_total,
-                channel.source_review_status,
-                channel.source_outage_since
-            ].join(':'))
-            .join('|');
-
-        if (idFingerprint !== lastRenderedIds) {
-            lastRenderedIds = idFingerprint;
-            container.innerHTML = '';
-            displayed.forEach(channel => container.appendChild(buildCard(channel)));
-        }
-    }
-
-    function setText(id, value) {
-        const element =
-            document.getElementById(id);
-
-        if (element) {
-            element.textContent = String(value);
-        }
-    }
-
-    function findCardById(container, id) {
-        return Array
-            .from(container.children)
-            .find(child => {
-                return (
-                    String(child.dataset.id) ===
-                    String(id)
-                );
-            });
-    }
-
-    function buildTimerHTML(channel) {
-        if (!isIncident(channel) || !channel.incident_since) return '';
-
-        const id = String(channel.id);
-        const startRaw = new Date(channel.incident_since).getTime();
-        const start = Number.isFinite(startRaw) ? startRaw : 0;
-        const seconds = start > 0 ? (Date.now() - start) / 1000 : 0;
-
-        return `
-            <span class="incident-timer" title="Tiempo global de incidencia (DTVSOL/NOC)">
-                <span class="dot"></span>
-                <span data-timer-id="${escapeHTML(id)}" data-incident-start="${start || ''}">
-                    ${formatDuration(seconds)}
-                </span>
-            </span>
-        `;
+        displayed.forEach(channel => {
+            container.appendChild(buildCard(channel));
+        });
     }
 
     function buildCard(channel) {
-        const manualProblem = hasManualProblem(channel);
-        const sourceCritical = !manualMode && isSourceCritical(channel);
-        const sourceDegraded = !manualMode && isSourceDegraded(channel);
-        const sourceMissing = !manualMode && isSourceMissing(channel);
-        const sourceDisabled = !manualMode && channel.source_state === 'disabled';
-        const incident = isIncident(channel);
-        const idArgument = JSON.stringify(channel.id);
-
-        let badgeClass = 'status-ok';
-        let badgeText = 'ESTABLE';
-
-        if (incident) {
-            badgeClass = 'status-problem';
-            badgeText = 'INCIDENCIA';
-        } else if (sourceMissing) {
-            badgeClass = 'status-warning';
-            badgeText = 'NO EN DTVSOL';
-        } else if (sourceDisabled) {
-            badgeClass = 'status-disabled';
-            badgeText = 'DESACTIVADO';
-        }
-
-        const outage = formatSourceOutage(channel);
-        const stageRaw = String(channel.source_stage || '').trim();
-        const stage = stageRaw && !/^(0|1|true|false)$/i.test(stageRaw)
-            ? ` · ${escapeHTML(stageRaw)}`
-            : '';
-        const manualIssue = manualIssueText(channel);
-
-        const reviewPending =
-            !manualMode &&
-            (sourceCritical || sourceDegraded) &&
-            !manualProblem;
-
-        const reviewHtml = reviewPending
-            ? `
-                <div class="review-box review-critical">
-                    <span class="text-xs font-semibold text-red-300">
-                        ${sourceCritical
-                            ? '🚨 DTVSOL detecta corte. Ya cuenta como incidencia. Opcional: indica qué está afectado:'
-                            : '🚨 DTVSOL detecta degradación. Ya cuenta como incidencia. Opcional: indica qué está afectado:'}
-                    </span>
-                    <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "image")'>SIN IMAGEN</button>
-                    <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "sound")'>SIN AUDIO</button>
-                    <button class="review-btn danger" onclick='reviewSourceIssue(${idArgument}, "both")'>AMBOS</button>
-                </div>
-            `
-            : '';
+        const incident = hasProblem(channel);
+        const idArg = JSON.stringify(channel.id);
 
         const card = document.createElement('div');
-        card.dataset.id = String(channel.id);
         card.className =
             `channel-card bg-black border ` +
-            `${incident
-                ? 'border-red-500'
-                : sourceMissing
-                    ? 'border-amber-500'
-                    : 'border-zinc-800'
-            } rounded-3xl px-6 py-4`;
+            `${incident ? 'border-red-500' : 'border-zinc-800'} ` +
+            `rounded-3xl px-6 py-4`;
 
         card.innerHTML = `
-            <div class="flex items-center justify-between gap-5">
+            <div class="channel-row flex items-center justify-between gap-5">
                 <div class="flex items-center gap-6 min-w-0">
                     <div class="w-14 text-center shrink-0">
-                        ${manualMode
-                            ? `<div class="text-3xl font-mono font-bold text-orange-400 px-2 py-1">
-                                ${escapeHTML(channel.number)}
-                               </div>`
-                            : `<button type="button"
-                                       onclick='openChannelHistory(${idArgument})'
-                                       class="channel-number-history text-3xl font-mono font-bold text-orange-400"
-                                       title="Ver historial del canal">
-                                ${escapeHTML(channel.number)}
-                               </button>`}
+                        <div class="text-3xl font-mono font-bold text-orange-400">
+                            ${escapeHTML(channel.number)}
+                        </div>
                     </div>
+
                     <div class="min-w-0">
                         <div class="text-xl font-semibold truncate">
                             ${escapeHTML(channel.name)}
                         </div>
-                        ${manualMode
-                            ? ''
-                            : `<div class="source-subline">
-                                <span class="${sourceStateClass(channel)} proxy-pill">
-                                    ${escapeHTML(sourceStateText(channel))}
-                                </span>
-                                ${stage}
-                            </div>`}
                     </div>
                 </div>
 
-                <div class="flex items-center gap-6 shrink-0">
-                    ${!manualMode && channel.incident_open && !isSourceIncident(channel) && !manualProblem && !channel.source_observing
-                        ? `<button class="source-pill source-degraded"
-                                   title="DTVSOL ya recuperó. Confirma para cerrar la incidencia global."
-                                   onclick='confirmNocOk(${idArgument})'>
-                               ✓ VALIDAR OK
-                           </button>`
-                        : ''}
-
+                <div class="channel-controls flex items-center gap-6 shrink-0">
                     <div class="flex items-center gap-2">
                         <span class="text-white font-medium text-xs">IMAGEN</span>
                         <span class="status-text ${channel.image ? 'text-yes' : 'text-no'}">
                             ${channel.image ? 'SÍ' : 'NO'}
                         </span>
+
                         <label class="switch">
                             <input type="checkbox"
                                    ${channel.image ? 'checked' : ''}
-                                   onchange='updateImage(${idArgument}, this.checked)'>
+                                   onchange='updateImage(${idArg}, this.checked)'>
                             <span class="slider"></span>
                         </label>
                     </div>
@@ -2779,1076 +649,527 @@ ${error.message}`);
                         <span class="status-text ${channel.sound ? 'text-yes' : 'text-no'}">
                             ${channel.sound ? 'SÍ' : 'NO'}
                         </span>
+
                         <label class="switch">
                             <input type="checkbox"
                                    ${channel.sound ? 'checked' : ''}
-                                   onchange='updateSound(${idArgument}, this.checked)'>
+                                   onchange='updateSound(${idArg}, this.checked)'>
                             <span class="slider"></span>
                         </label>
                     </div>
 
                     <div class="flex items-center gap-2">
-                        <div class="${badgeClass} px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
-                            ${badgeText}
+                        <div class="${incident ? 'status-problem' : 'status-ok'} px-5 py-2 rounded-3xl font-bold text-sm min-w-[120px] text-center">
+                            ${incident ? 'INCIDENCIA' : 'ESTABLE'}
                         </div>
+
                         ${incident ? buildTimerHTML(channel) : ''}
                     </div>
 
                     <button type="button"
-                            onclick='deleteChannel(${idArgument})'
+                            onclick='deleteChannel(${idArg})'
                             class="ml-1 text-xl text-slate-500 hover:text-red-400"
-                            title="Eliminar del monitor">✕</button>
+                            title="Eliminar del monitor">
+                        ✕
+                    </button>
                 </div>
             </div>
-            ${reviewHtml}
         `;
-
-        card.addEventListener('contextmenu', event => {
-            if (manualMode) return;
-
-            event.preventDefault();
-            openChannelHistory(channel.id);
-        });
-
-        card.title = manualMode
-            ? ''
-            : 'Clic derecho para ver el historial DTVSOL del canal';
 
         return card;
     }
 
-    function updateCardInPlace(card, channel) {
-        const replacement = buildCard(channel);
-        card.replaceWith(replacement);
-    }
+    async function setManualState(id, field, value) {
+        if (operationInProgress) return;
+        operationInProgress = true;
 
-    // ==================== HELPERS ====================
-    function hasProblem(channel) {
-        return isIncident(channel);
-    }
-
-    function sortChannels() {
-        channels.sort((a, b) => {
-            return String(a.number).localeCompare(
-                String(b.number),
-                'es',
-                {
-                    numeric: true,
-                    sensitivity: 'base'
-                }
-            );
-        });
-    }
-
-    function escapeHTML(value) {
-        return String(value ?? '')
-            .replaceAll('&', '&amp;')
-            .replaceAll('<', '&lt;')
-            .replaceAll('>', '&gt;')
-            .replaceAll('"', '&quot;')
-            .replaceAll("'", '&#039;');
-    }
-
-    /*
-     * Desactiva el filtro y limpia la búsqueda.
-     * Esto evita que un canal nuevo estable quede oculto.
-     */
-    function showAllChannels() {
-        filterOnlyIncidents = false;
-        searchQuery = '';
-
-        const searchInput =
-            document.getElementById('search-input');
-
-        if (searchInput) {
-            searchInput.value = '';
-        }
-
-        const clearButton =
-            document.getElementById(
-                'search-clear-btn'
-            );
-
-        if (clearButton) {
-            clearButton.classList.remove(
-                'visible'
-            );
-        }
-
-        updateFilterButton();
-
-        lastRenderedIds = '';
-    }
-
-    // ==================== FECHA Y HORA ====================
-    function updateDateTime() {
-        const now = new Date(
-            new Date().toLocaleString(
-                'en-US',
-                {
-                    timeZone: 'America/Lima'
-                }
-            )
+        const channel = channels.find(
+            item => String(item.id) === String(id)
         );
 
-        const pad = value => {
-            return String(value).padStart(2, '0');
+        if (!channel) {
+            operationInProgress = false;
+            return;
+        }
+
+        const previousImage = channel.image;
+        const previousSound = channel.sound;
+
+        const nextImage =
+            field === 'image'
+                ? value
+                : channel.image;
+
+        const nextSound =
+            field === 'sound'
+                ? value
+                : channel.sound;
+
+        const wasProblem = !previousImage || !previousSound;
+        const willBeProblem = !nextImage || !nextSound;
+
+        const fields = {
+            [field]: value
         };
 
-        const element =
-            document.getElementById(
-                'current-datetime'
-            );
-
-        if (element) {
-            element.textContent =
-                `${pad(now.getDate())}/` +
-                `${pad(now.getMonth() + 1)}/` +
-                `${now.getFullYear()} ` +
-                `${pad(now.getHours())}:` +
-                `${pad(now.getMinutes())}`;
-        }
-    }
-
-    // ==================== AGREGAR CANAL ====================
-    async function addChannel() {
-        const numberInput =
-            document.getElementById(
-                'channel-number'
-            );
-
-        const nameInput =
-            document.getElementById(
-                'channel-name'
-            );
-
-        const number = String(
-            numberInput?.value || ''
-        ).trim();
-
-        const name = String(
-            nameInput?.value || ''
-        ).trim();
-
-        if (!number || !name) {
-            alert(
-                'Por favor ingresa el número ' +
-                'y el nombre del canal.'
-            );
-
-            return;
-        }
-
-        const localDuplicate =
-            channels.find(channel => {
-                return (
-                    String(channel.number)
-                        .trim()
-                        .toLowerCase() ===
-                    number.toLowerCase()
-                );
-            });
-
-        if (localDuplicate) {
-            showAllChannels();
-            renderChannels();
-
-            alert(
-                `El canal ${number} ya está ` +
-                `registrado como ` +
-                `“${localDuplicate.name}”.`
-            );
-
-            return;
-        }
-
-        await withLock(async () => {
-            const {
-                data: existing,
-                error: checkError
-            } = await sb
-                .from('GPONTV')
-                .select('id, number, name')
-                .eq('number', number)
-                .limit(1);
-
-            if (checkError) {
-                console.error(
-                    'Duplicate check error:',
-                    checkError
-                );
-
-                alert(
-                    `No se pudo verificar el número ` +
-                    `del canal:\n${checkError.message}`
-                );
-
-                return;
-            }
-
-            if (
-                existing &&
-                existing.length > 0
-            ) {
-                showAllChannels();
-                renderChannels();
-
-                alert(
-                    `El canal ${number} ya existe ` +
-                    `en la base de datos.`
-                );
-
-                return;
-            }
-
-            const newChannel =
-                await insertChannel(
-                    number,
-                    name
-                );
-
-            if (!newChannel) return;
-
-            channels.push(mapRowToChannel(newChannel));
-
-            if (numberInput) {
-                numberInput.value = '';
-            }
-
-            if (nameInput) {
-                nameInput.value = '';
-            }
-
-            /*
-             * El canal nuevo nace estable.
-             * Por eso mostramos todos los canales
-             * después de agregarlo.
-             */
-            showAllChannels();
-
-            lastRenderedIds = '';
-            renderChannels();
-
-            if (numberInput) {
-                numberInput.focus();
-            }
-        });
-    }
-
-    async function deleteChannel(id) {
-        if (!confirm('¿Eliminar este canal?')) {
-            return;
-        }
-
-        await withLock(async () => {
-            const success =
-                await deleteChannelFromDB(id);
-
-            if (!success) return;
-
-            channels = channels.filter(
-                channel => {
-                    return (
-                        String(channel.id) !==
-                        String(id)
-                    );
-                }
-            );
-
-            delete incidentStart[String(id)];
-            lsClearTimer(id);
-
-            lastRenderedIds = '';
-            renderChannels();
-        });
-    }
-
-    async function updateNocState(id, field, value) {
-        const channel = channels.find(item => String(item.id) === String(id));
-        if (!channel) return;
-
-        const boolValue = Boolean(value);
-        const nextImage = field === 'image' ? boolValue : Boolean(channel.image);
-        const nextSound = field === 'sound' ? boolValue : Boolean(channel.sound);
-        const sourceAffected = isSourceIncident(channel);
-        const now = new Date().toISOString();
-
-        const fields = { [field]: boolValue };
-
-        if (!nextImage || !nextSound) {
+        if (!wasProblem && willBeProblem) {
             fields.incident_open = true;
-            fields.incident_since = channel.incident_since || now;
-            fields.incident_origin = channel.incident_origin || 'noc';
-            fields.source_review_status = 'confirmed';
-        } else if (sourceAffected) {
-            /* DTVSOL sigue afectado: NOC puede marcar audio/imagen OK, pero no cierra aún. */
-            fields.incident_open = true;
-            fields.incident_since = channel.incident_since || now;
-            fields.incident_origin = channel.incident_origin || 'dtvsol';
-            fields.source_review_status = 'confirmed';
-        } else {
-            /* DTVSOL ya está estable y NOC deja Imagen + Audio en OK: cierre global. */
+            fields.incident_since = new Date().toISOString();
+            fields.incident_origin = 'noc';
+        }
+
+        if (wasProblem && !willBeProblem) {
             fields.incident_open = false;
             fields.incident_since = null;
             fields.incident_origin = null;
-            fields.source_review_status = 'none';
         }
 
-        const success = await updateChannelInDB(channel.id, fields);
+        const success = await updateChannelInDB(
+            channel.id,
+            fields
+        );
+
         if (!success) {
-            await loadChannels();
-            lastRenderedIds = '';
-            renderChannels();
-            alert('No se pudo guardar el estado NOC.');
+            alert('No se pudo guardar el cambio.');
+            operationInProgress = false;
+            await safeReload();
             return;
         }
 
         Object.assign(channel, fields);
-        lastRenderedIds = '';
         renderChannels();
+
+        operationInProgress = false;
     }
 
-    function updateImage(id, value) {
-        updateNocState(id, 'image', value);
+    function updateImage(id, checked) {
+        return setManualState(id, 'image', checked);
     }
 
-    function updateSound(id, value) {
-        updateNocState(id, 'sound', value);
+    function updateSound(id, checked) {
+        return setManualState(id, 'sound', checked);
     }
 
-    async function confirmNocOk(id) {
-        const channel = channels.find(item => String(item.id) === String(id));
+    async function addChannel() {
+        const numberInput = document.getElementById('channel-number');
+        const nameInput = document.getElementById('channel-name');
+
+        const number = numberInput.value.trim();
+        const name = nameInput.value.trim();
+
+        if (!number || !name) {
+            alert('Completa el número y el nombre del canal.');
+            return;
+        }
+
+        const duplicated = channels.some(
+            channel => String(channel.number).trim() === number
+        );
+
+        if (duplicated) {
+            alert('Ese número de canal ya existe.');
+            return;
+        }
+
+        const { error } = await sb
+            .from('GPONTV')
+            .insert({
+                number,
+                name,
+                image: true,
+                sound: true,
+                incident_open: false,
+                incident_since: null,
+                incident_origin: null
+            });
+
+        if (error) {
+            console.error(error);
+            alert(`No se pudo agregar el canal.\n\n${error.message}`);
+            return;
+        }
+
+        numberInput.value = '';
+        nameInput.value = '';
+
+        await safeReload();
+    }
+
+    async function deleteChannel(id) {
+        const channel = channels.find(
+            item => String(item.id) === String(id)
+        );
+
         if (!channel) return;
 
-        if (isSourceIncident(channel)) {
-            alert('DTVSOL todavía reporta afectación. La incidencia no puede cerrarse aún.');
+        const ok = confirm(
+            `¿Eliminar el canal ${channel.number} – ${channel.name}?`
+        );
+
+        if (!ok) return;
+
+        const { error } = await sb
+            .from('GPONTV')
+            .delete()
+            .eq('id', channel.id);
+
+        if (error) {
+            console.error(error);
+            alert(`No se pudo eliminar el canal.\n\n${error.message}`);
             return;
         }
 
-        const fields = {
-            image: true,
-            sound: true,
-            incident_open: false,
-            incident_since: null,
-            incident_origin: null,
-            source_review_status: 'none'
-        };
+        channels = channels.filter(
+            item => String(item.id) !== String(channel.id)
+        );
 
-        const success = await updateChannelInDB(channel.id, fields);
-        if (!success) {
-            alert('No se pudo cerrar la incidencia.');
+        renderChannels();
+    }
+
+    async function resetAllStates() {
+        const affected = channels.filter(hasProblem);
+
+        if (!affected.length) {
+            alert('Todos los canales ya están estables.');
             return;
         }
 
-        Object.assign(channel, fields);
-        lastRenderedIds = '';
+        const ok = confirm(
+            `¿Restablecer IMAGEN y AUDIO en ${affected.length} canal(es)?`
+        );
+
+        if (!ok) return;
+
+        const { error } = await sb
+            .from('GPONTV')
+            .update({
+                image: true,
+                sound: true,
+                incident_open: false,
+                incident_since: null,
+                incident_origin: null
+            })
+            .in(
+                'id',
+                affected.map(channel => channel.id)
+            );
+
+        if (error) {
+            console.error(error);
+            alert(`No se pudieron reiniciar los estados.\n\n${error.message}`);
+            return;
+        }
+
+        affected.forEach(channel => {
+            channel.image = true;
+            channel.sound = true;
+            channel.incident_open = false;
+            channel.incident_since = null;
+            channel.incident_origin = null;
+        });
+
         renderChannels();
-    }
-
-    // ==================== BUSCADOR ====================
-    function updateSearch(value) {
-        searchQuery = String(value || '')
-            .toLowerCase()
-            .trim();
-
-        const clearButton =
-            document.getElementById(
-                'search-clear-btn'
-            );
-
-        if (clearButton) {
-            clearButton.classList.toggle(
-                'visible',
-                String(value).length > 0
-            );
-        }
-
-        lastRenderedIds = '';
-        renderChannels();
-    }
-
-    function clearSearch() {
-        const input =
-            document.getElementById(
-                'search-input'
-            );
-
-        if (input) {
-            input.value = '';
-            input.focus();
-        }
-
-        searchQuery = '';
-
-        const clearButton =
-            document.getElementById(
-                'search-clear-btn'
-            );
-
-        if (clearButton) {
-            clearButton.classList.remove(
-                'visible'
-            );
-        }
-
-        lastRenderedIds = '';
-        renderChannels();
-    }
-
-    // ==================== UI ====================
-    function applyPanelState() {
-        const syncBar = document.getElementById('source-sync-bar');
-        const formContainer = document.getElementById('form-container');
-        const icon = document.getElementById('form-icon');
-        const button = document.getElementById('toggle-form-btn');
-
-        /*
-         * La tuerca decide el contenido del botón PANEL:
-         * DTVSOL activo -> Verificación DTVSOL
-         * Modo manual  -> Agregar canal
-         */
-        if (syncBar) {
-            syncBar.style.display =
-                panelOpen && !manualMode
-                    ? 'flex'
-                    : 'none';
-        }
-
-        if (formContainer) {
-            formContainer.style.display =
-                panelOpen && manualMode
-                    ? 'block'
-                    : 'none';
-        }
-
-        if (icon) {
-            icon.textContent = panelOpen ? '▲' : '▼';
-        }
-
-        if (button) {
-            button.title = manualMode
-                ? 'Mostrar u ocultar Agregar canal'
-                : 'Mostrar u ocultar Verificación DTVSOL';
-        }
-
-        localStorage.setItem('panelOpen', String(panelOpen));
     }
 
     function togglePanel() {
         panelOpen = !panelOpen;
-        applyPanelState();
+
+        const form = document.getElementById('form-container');
+        const icon = document.getElementById('form-icon');
+
+        form.style.display = panelOpen ? 'block' : 'none';
+        icon.textContent = panelOpen ? '▲' : '▼';
+
+        localStorage.setItem(
+            'gpontv_manual_panel_open_v1',
+            String(panelOpen)
+        );
     }
 
-    // Compatibilidad con llamadas antiguas.
-    function toggleForm() {
-        togglePanel();
-    }
+    function updateSearch(value) {
+        searchQuery = String(value || '')
+            .trim()
+            .toLowerCase();
 
-    function updateManualModeButton() {
-        const button = document.getElementById('manual-mode-btn');
-        if (!button) return;
+        const clear = document.getElementById('search-clear-btn');
+        clear.classList.toggle('visible', Boolean(searchQuery));
 
-        button.classList.toggle('text-orange-400', manualMode);
-        button.classList.toggle('border-orange-500', manualMode);
-        button.classList.toggle('bg-orange-500/10', manualMode);
-
-        button.title = manualMode
-            ? 'MODO MANUAL ACTIVO · DTVSOL pausado · clic para reactivar DTVSOL'
-            : 'DTVSOL ACTIVO · clic para activar modo manual';
-    }
-
-    async function closeDtvsolNotifications() {
-        try {
-            const registration = await getNotificationRegistration();
-            if (!registration) return;
-
-            const notifications = await registration.getNotifications();
-            notifications.forEach(item => {
-                if (String(item.tag || '').startsWith('dtvsol-')) {
-                    item.close();
-                }
-            });
-        } catch (error) {
-            console.warn('No se pudieron cerrar las notificaciones DTVSOL:', error);
-        }
-    }
-
-    async function toggleManualMode() {
-        manualMode = !manualMode;
-        localStorage.setItem(MANUAL_MODE_KEY, String(manualMode));
-
-        if (manualMode) {
-            if (sourceAutoTimer) {
-                clearTimeout(sourceAutoTimer);
-                sourceAutoTimer = null;
-            }
-
-            closeSourceInventory();
-            closeChannelHistory();
-            await closeDtvsolNotifications();
-        }
-
-        updateManualModeButton();
-        applyPanelState();
-
-        filterOnlyIncidents = channels.some(needsAttention);
-        updateFilterButton();
-
-        lastRenderedIds = '';
         renderChannels();
-
-        if (!manualMode) {
-            if (sourceCheckIsDue()) {
-                await syncFromGponSource({ manual: false });
-            }
-
-            scheduleNextSourceCheck();
-            await processBrowserNotifications();
-        }
     }
 
-    document.addEventListener('click', event => {
-        const menu = document.getElementById('panel-context-menu');
-        const button = document.getElementById('toggle-form-btn');
-
-        if (!menu || menu.classList.contains('hidden')) return;
-        if (menu.contains(event.target) || button?.contains(event.target)) return;
-
-        closePanelMenu();
-    });
-
-    function updateFilterButton() {
-        const button =
-            document.getElementById(
-                'filter-button'
-            );
-
-        const icon =
-            document.getElementById(
-                'filter-icon'
-            );
-
-        const text =
-            document.getElementById(
-                'filter-text'
-            );
-
-        if (icon) {
-            icon.textContent =
-                filterOnlyIncidents
-                    ? '📋'
-                    : '🔴';
-        }
-
-        if (text) {
-            text.textContent =
-                filterOnlyIncidents
-                    ? 'MOSTRAR TODOS'
-                    : 'FILTRAR INCIDENCIAS';
-        }
-
-        if (button) {
-            button.classList.toggle(
-                'bg-orange-500',
-                filterOnlyIncidents
-            );
-
-            button.classList.toggle(
-                'text-white',
-                filterOnlyIncidents
-            );
-        }
+    function clearSearch() {
+        const input = document.getElementById('search-input');
+        input.value = '';
+        searchQuery = '';
+        document
+            .getElementById('search-clear-btn')
+            .classList.remove('visible');
+        renderChannels();
     }
 
     function toggleFilter() {
-        filterOnlyIncidents =
-            !filterOnlyIncidents;
-
+        filterOnlyIncidents = !filterOnlyIncidents;
         updateFilterButton();
-
-        lastRenderedIds = '';
         renderChannels();
     }
 
-    // ==================== CSV ====================
-    function csvEscape(value) {
-        const text = String(value ?? '');
+    function updateFilterButton() {
+        setText(
+            'filter-text',
+            filterOnlyIncidents
+                ? 'VER TODOS'
+                : 'FILTRAR INCIDENCIAS'
+        );
 
-        return /[",\n\r]/.test(text)
-            ? `"${text.replaceAll('"', '""')}"`
-            : text;
+        setText(
+            'filter-icon',
+            filterOnlyIncidents
+                ? '📺'
+                : '🔴'
+        );
     }
 
-    function parseCSVLine(line) {
-        const result = [];
+    function copyIncidentReport() {
+        const problemChannels = channels.filter(hasProblem);
 
-        let current = '';
-        let insideQuotes = false;
-
-        for (
-            let i = 0;
-            i < line.length;
-            i++
-        ) {
-            const char = line[i];
-            const next = line[i + 1];
-
-            if (
-                char === '"' &&
-                insideQuotes &&
-                next === '"'
-            ) {
-                current += '"';
-                i++;
-            } else if (char === '"') {
-                insideQuotes = !insideQuotes;
-            } else if (
-                char === ',' &&
-                !insideQuotes
-            ) {
-                result.push(current.trim());
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-
-        result.push(current.trim());
-
-        return result;
-    }
-
-    async function deleteAllChannels() {
-        if (channels.length === 0) {
-            alert(
-                'No hay canales para eliminar.'
-            );
-
+        if (!problemChannels.length) {
+            alert('No hay incidencias activas para reportar.');
             return;
         }
 
-        const accepted = confirm(
-            `¿Eliminar los ${channels.length} ` +
-            `canales? Esta acción no se ` +
-            `puede deshacer.`
-        );
+        const now = nowLima();
+        const pad = value => String(value).padStart(2, '0');
 
-        if (!accepted) return;
+        const lines = [
+            '🚨 REPORTE DE CANALES CON INCIDENCIAS 🚨',
+            'LIMA / CUSCO / ICA',
+            `Fecha: ${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
+            `Incidencias detectadas: ${problemChannels.length}`,
+            ''
+        ];
 
-        await withLock(async () => {
-            const ids = channels.map(
-                channel => channel.id
+        problemChannels.forEach(channel => {
+            const issues = [];
+
+            if (!channel.image) issues.push('Sin Imagen');
+            if (!channel.sound) issues.push('Sin Audio');
+
+            const duration = incidentDuration(channel);
+
+            lines.push(
+                `CANAL ${channel.number} – ${String(channel.name).toUpperCase()} ` +
+                `(${issues.join(', ')})${duration ? ` - ${duration}` : ''}`
             );
-
-            const { error } = await sb
-                .from('GPONTV')
-                .delete()
-                .in('id', ids);
-
-            if (error) {
-                console.error(
-                    'Delete all error:',
-                    error
-                );
-
-                alert(
-                    `No se pudieron eliminar ` +
-                    `los canales:\n${error.message}`
-                );
-
-                return;
-            }
-
-            channels = [];
-
-            lsClearAllTimers();
-
-            Object
-                .keys(incidentStart)
-                .forEach(key => {
-                    delete incidentStart[key];
-                });
-
-            filterOnlyIncidents = false;
-            searchQuery = '';
-            lastRenderedIds = '';
-
-            const searchInput =
-                document.getElementById(
-                    'search-input'
-                );
-
-            if (searchInput) {
-                searchInput.value = '';
-            }
-
-            updateFilterButton();
-            renderChannels();
         });
+
+        const report = lines.join('\n');
+
+        const copied = () => {
+            setText('copy-btn-icon', '✅');
+            setText('copy-btn-text', 'COPIADO');
+
+            setTimeout(() => {
+                setText('copy-btn-icon', '📋');
+                setText('copy-btn-text', 'COPIAR');
+            }, 1400);
+        };
+
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard
+                .writeText(report)
+                .then(copied)
+                .catch(() => fallbackCopy(report, copied));
+        } else {
+            fallbackCopy(report, copied);
+        }
+    }
+
+    function fallbackCopy(text, callback) {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+
+        document.body.appendChild(area);
+        area.select();
+
+        try {
+            document.execCommand('copy');
+            callback();
+        } catch {
+            alert('No se pudo copiar automáticamente.');
+        }
+
+        area.remove();
     }
 
     function exportData() {
-        if (channels.length === 0) {
-            alert(
-                'No hay datos para exportar.'
-            );
-
-            return;
-        }
-
         const rows = [
-            [
-                'Número',
-                'Nombre',
-                'Imagen',
-                'Audio',
-                'Estado',
-                'Tiempo_Avería'
-            ]
-        ];
-
-        channels.forEach(channel => {
-            const globalStartRaw = channel.incident_since
-                ? new Date(channel.incident_since).getTime()
-                : null;
-            const start = Number.isFinite(globalStartRaw)
-                ? globalStartRaw
-                : null;
-
-            const incidentTime = start
-                ? formatDuration((Date.now() - start) / 1000)
-                : '';
-
-            rows.push([
+            ['number', 'name', 'image', 'sound'],
+            ...channels.map(channel => [
                 channel.number,
                 channel.name,
-                channel.image ? 'SÍ' : 'NO',
-                channel.sound ? 'SÍ' : 'NO',
-                hasProblem(channel)
-                    ? 'INCIDENCIA'
-                    : 'ESTABLE',
-                incidentTime
-            ]);
-        });
+                channel.image,
+                channel.sound
+            ])
+        ];
 
         const csv = rows
-            .map(row => {
-                return row
-                    .map(csvEscape)
-                    .join(',');
-            })
+            .map(row => row.map(csvEscape).join(','))
             .join('\n');
 
         const blob = new Blob(
-            ['\uFEFF', csv],
-            {
-                type: 'text/csv;charset=utf-8'
-            }
+            [csv],
+            { type: 'text/csv;charset=utf-8' }
         );
 
-        const url =
-            URL.createObjectURL(blob);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
 
-        const link =
-            document.createElement('a');
-
-        link.href = url;
-
-        link.download =
-            `gpon_tv_` +
-            `${new Date()
-                .toISOString()
-                .slice(0, 10)
-            }.csv`;
-
-        document.body.appendChild(link);
-
-        link.click();
-        link.remove();
+        a.href = url;
+        a.download = `gpon_tv_${new Date().toISOString().slice(0, 10)}.csv`;
+        a.click();
 
         URL.revokeObjectURL(url);
     }
 
-    function importCSV(input) {
-        const file = input.files?.[0];
+    function csvEscape(value) {
+        const text = String(value ?? '');
 
-        if (!file) return;
-
-        const reader = new FileReader();
-
-        reader.onload = async event => {
-            const text = String(
-                event.target?.result || ''
-            )
-                .replace(/^\uFEFF/, '')
-                .trim();
-
-            if (!text) {
-                alert(
-                    'El archivo CSV está vacío.'
-                );
-
-                input.value = '';
-                return;
-            }
-
-            const lines =
-                text.split(/\r?\n/);
-
-            const imported = [];
-            const seenNumbers = new Set();
-
-            for (
-                let i = 1;
-                i < lines.length;
-                i++
-            ) {
-                if (!lines[i].trim()) {
-                    continue;
-                }
-
-                const [
-                    number,
-                    name,
-                    image,
-                    sound
-                ] = parseCSVLine(lines[i]);
-
-                const normalizedNumber =
-                    String(number || '').trim();
-
-                const normalizedName =
-                    String(name || '').trim();
-
-                if (
-                    !normalizedNumber ||
-                    !normalizedName
-                ) {
-                    continue;
-                }
-
-                if (
-                    seenNumbers.has(
-                        normalizedNumber
-                            .toLowerCase()
-                    )
-                ) {
-                    continue;
-                }
-
-                seenNumbers.add(
-                    normalizedNumber
-                        .toLowerCase()
-                );
-
-                imported.push({
-                    number: normalizedNumber,
-                    name: normalizedName,
-
-                    image:
-                        String(image || '')
-                            .toUpperCase() !== 'NO',
-
-                    sound:
-                        String(sound || '')
-                            .toUpperCase() !== 'NO'
-                });
-            }
-
-            if (imported.length === 0) {
-                alert(
-                    'No se encontraron canales ' +
-                    'válidos en el CSV.'
-                );
-
-                input.value = '';
-                return;
-            }
-
-            if (
-                channels.length > 0 &&
-                !confirm(
-                    `¿Reemplazar los ` +
-                    `${channels.length} canales ` +
-                    `actuales con ` +
-                    `${imported.length} del CSV?`
-                )
-            ) {
-                input.value = '';
-                return;
-            }
-
-            await withLock(async () => {
-                if (channels.length > 0) {
-                    const ids = channels.map(
-                        channel => channel.id
-                    );
-
-                    const {
-                        error: deleteError
-                    } = await sb
-                        .from('GPONTV')
-                        .delete()
-                        .in('id', ids);
-
-                    if (deleteError) {
-                        console.error(
-                            'Import delete error:',
-                            deleteError
-                        );
-
-                        alert(
-                            `No se pudieron eliminar ` +
-                            `los canales actuales:\n` +
-                            `${deleteError.message}`
-                        );
-
-                        return;
-                    }
-                }
-
-                const {
-                    data,
-                    error: insertError
-                } = await sb
-                    .from('GPONTV')
-                    .insert(imported)
-                    .select(
-                        'id, number, name, ' +
-                        'image, sound'
-                    );
-
-                if (insertError) {
-                    console.error(
-                        'Import insert error:',
-                        insertError
-                    );
-
-                    alert(
-                        `No se pudo importar el CSV:\n` +
-                        `${insertError.message}`
-                    );
-
-                    await loadChannels();
-
-                    lastRenderedIds = '';
-                    renderChannels();
-
-                    return;
-                }
-
-                channels = (data || []).map(mapRowToChannel);
-
-                lsClearAllTimers();
-
-                Object
-                    .keys(incidentStart)
-                    .forEach(key => {
-                        delete incidentStart[key];
-                    });
-
-                channels.forEach(
-                    syncIncidentStart
-                );
-
-                showAllChannels();
-
-                lastRenderedIds = '';
-                renderChannels();
-
-                alert(
-                    `Se importaron ` +
-                    `${channels.length} canales.`
-                );
-            });
-
-            input.value = '';
-        };
-
-        reader.onerror = () => {
-            alert(
-                'No se pudo leer el archivo CSV.'
-            );
-
-            input.value = '';
-        };
-
-        reader.readAsText(
-            file,
-            'UTF-8'
-        );
-    }
-
-    // ==================== REALTIME ====================
-    let realtimeChannel = null;
-    let realtimeRetryTimer = null;
-
-    function setRealtimeStatus(status) {
-        const dot =
-            document.getElementById(
-                'realtime-dot'
-            );
-
-        const label =
-            document.getElementById(
-                'realtime-label'
-            );
-
-        if (!dot || !label) return;
-
-        const states = {
-            connected: {
-                className: 'bg-green-500',
-                text: 'ONLINE'
-            },
-
-            disconnected: {
-                className: 'bg-red-500',
-                text: 'SIN CONEXIÓN'
-            },
-
-            reconnecting: {
-                className: 'bg-yellow-400',
-                text: 'RECONECTANDO…'
-            }
-        };
-
-        const state =
-            states[status] ||
-            states.disconnected;
-
-        dot.className =
-            `w-2 h-2 rounded-full ` +
-            `${state.className} ` +
-            `${status === 'connected'
-                ? 'animate-pulse'
-                : ''
-            }`;
-
-        label.textContent = state.text;
-    }
-
-    function setupRealtime() {
-        if (realtimeChannel) {
-            sb.removeChannel(
-                realtimeChannel
-            );
-
-            realtimeChannel = null;
+        if (/[",\n]/.test(text)) {
+            return `"${text.replaceAll('"', '""')}"`;
         }
 
-        clearTimeout(
-            realtimeRetryTimer
-        );
+        return text;
+    }
 
-        setRealtimeStatus(
-            'reconnecting'
-        );
+    function parseCSV(text) {
+        const rows = [];
+        let row = [];
+        let cell = '';
+        let quoted = false;
 
-        realtimeChannel =
-            sb.channel('gpontv-live');
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
 
-        realtimeChannel
+            if (char === '"') {
+                if (quoted && text[i + 1] === '"') {
+                    cell += '"';
+                    i++;
+                } else {
+                    quoted = !quoted;
+                }
+            } else if (char === ',' && !quoted) {
+                row.push(cell);
+                cell = '';
+            } else if ((char === '\n' || char === '\r') && !quoted) {
+                if (char === '\r' && text[i + 1] === '\n') i++;
+
+                row.push(cell);
+
+                if (row.some(value => value.trim() !== '')) {
+                    rows.push(row);
+                }
+
+                row = [];
+                cell = '';
+            } else {
+                cell += char;
+            }
+        }
+
+        row.push(cell);
+
+        if (row.some(value => value.trim() !== '')) {
+            rows.push(row);
+        }
+
+        return rows;
+    }
+
+    async function importCSV(input) {
+        const file = input.files?.[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const rows = parseCSV(text);
+
+            if (rows.length < 2) {
+                alert('El CSV está vacío o no tiene datos.');
+                return;
+            }
+
+            const headers = rows[0].map(
+                value => value.trim().toLowerCase()
+            );
+
+            const numberIndex = headers.indexOf('number');
+            const nameIndex = headers.indexOf('name');
+            const imageIndex = headers.indexOf('image');
+            const soundIndex = headers.indexOf('sound');
+
+            if (numberIndex < 0 || nameIndex < 0) {
+                alert('El CSV debe contener al menos number y name.');
+                return;
+            }
+
+            const payload = rows.slice(1)
+                .map(row => ({
+                    number: String(row[numberIndex] ?? '').trim(),
+                    name: String(row[nameIndex] ?? '').trim(),
+                    image:
+                        imageIndex < 0
+                            ? true
+                            : String(row[imageIndex]).toLowerCase() !== 'false',
+                    sound:
+                        soundIndex < 0
+                            ? true
+                            : String(row[soundIndex]).toLowerCase() !== 'false'
+                }))
+                .filter(row => row.number && row.name);
+
+            if (!payload.length) {
+                alert('No se encontraron canales válidos.');
+                return;
+            }
+
+            const { error } = await sb
+                .from('GPONTV')
+                .upsert(
+                    payload,
+                    { onConflict: 'number' }
+                );
+
+            if (error) throw error;
+
+            await safeReload();
+            alert(`${payload.length} canal(es) importados.`);
+        } catch (error) {
+            console.error(error);
+            alert(`No se pudo importar el CSV.\n\n${error.message || error}`);
+        } finally {
+            input.value = '';
+        }
+    }
+
+    async function safeReload() {
+        try {
+            await loadChannels();
+            renderChannels();
+        } catch (error) {
+            console.error(error);
+            alert(`No se pudieron cargar los canales.\n\n${error.message || error}`);
+        }
+    }
+
+    function subscribeRealtime() {
+        if (realtimeChannel) {
+            sb.removeChannel(realtimeChannel);
+        }
+
+        realtimeChannel = sb
+            .channel('gpontv-manual-monitor')
             .on(
                 'postgres_changes',
                 {
@@ -3856,292 +1177,104 @@ ${error.message}`);
                     schema: 'public',
                     table: 'GPONTV'
                 },
-                payload => {
-                    if (
-                        payload.eventType ===
-                        'INSERT'
-                    ) {
-                        const row = payload.new;
+                async payload => {
+                    if (payload.eventType === 'DELETE') {
+                        channels = channels.filter(
+                            channel =>
+                                String(channel.id) !==
+                                String(payload.old?.id)
+                        );
+                    } else {
+                        const incoming = mapRowToChannel(payload.new);
+                        const index = channels.findIndex(
+                            channel =>
+                                String(channel.id) ===
+                                String(incoming.id)
+                        );
 
-                        const alreadyExists =
-                            channels.some(
-                                channel => {
-                                    return (
-                                        String(
-                                            channel.id
-                                        ) ===
-                                        String(
-                                            row.id
-                                        )
-                                    );
-                                }
-                            );
-
-                        if (!alreadyExists) {
-                            const channel = mapRowToChannel(row);
-
-                            channels.push(channel);
-
-                            syncIncidentStart(
-                                channel
-                            );
-
-                            lastRenderedIds = '';
-                            renderChannels();
+                        if (index >= 0) {
+                            channels[index] = incoming;
+                        } else {
+                            channels.push(incoming);
                         }
                     }
 
-                    if (
-                        payload.eventType ===
-                        'UPDATE'
-                    ) {
-                        const row = payload.new;
-
-                        const channel =
-                            channels.find(
-                                item => {
-                                    return (
-                                        String(
-                                            item.id
-                                        ) ===
-                                        String(
-                                            row.id
-                                        )
-                                    );
-                                }
-                            );
-
-                        if (channel) {
-                            Object.assign(
-                                channel,
-                                mapRowToChannel(row)
-                            );
-
-                            syncIncidentStart(
-                                channel
-                            );
-
-                            renderChannels();
-                        }
-                    }
-
-                    if (
-                        payload.eventType ===
-                        'DELETE'
-                    ) {
-                        const id =
-                            payload.old.id;
-
-                        channels =
-                            channels.filter(
-                                channel => {
-                                    return (
-                                        String(
-                                            channel.id
-                                        ) !==
-                                        String(id)
-                                    );
-                                }
-                            );
-
-                        delete incidentStart[
-                            String(id)
-                        ];
-
-                        lsClearTimer(id);
-
-                        lastRenderedIds = '';
-                        renderChannels();
-                    }
+                    renderChannels();
                 }
             )
             .subscribe(status => {
-                if (
-                    status ===
-                    'SUBSCRIBED'
+                const dot = document.getElementById('realtime-dot');
+                const label = document.getElementById('realtime-label');
+
+                if (status === 'SUBSCRIBED') {
+                    dot.className =
+                        'w-2 h-2 rounded-full bg-green-500';
+                    label.textContent = 'EN LÍNEA';
+                } else if (
+                    status === 'CHANNEL_ERROR' ||
+                    status === 'TIMED_OUT'
                 ) {
-                    setRealtimeStatus(
-                        'connected'
-                    );
-
-                    clearTimeout(
-                        realtimeRetryTimer
-                    );
-
-                    return;
-                }
-
-                if (
-                    status ===
-                        'CHANNEL_ERROR' ||
-                    status ===
-                        'TIMED_OUT' ||
-                    status ===
-                        'CLOSED'
-                ) {
-                    setRealtimeStatus(
-                        'disconnected'
-                    );
-
-                    realtimeRetryTimer =
-                        setTimeout(
-                            setupRealtime,
-                            5000
-                        );
+                    dot.className =
+                        'w-2 h-2 rounded-full bg-red-500';
+                    label.textContent = 'ERROR';
+                } else {
+                    dot.className =
+                        'w-2 h-2 rounded-full bg-yellow-400';
+                    label.textContent = 'CONECTANDO…';
                 }
             });
     }
 
-    document.addEventListener('keydown', event => {
-        if (event.key === 'Escape') closeSourceInventory();
-    });
+    function refreshTimers() {
+        document
+            .querySelectorAll('[data-timer-id]')
+            .forEach(node => {
+                const id = node.getAttribute('data-timer-id');
+                const channel = channels.find(
+                    item => String(item.id) === String(id)
+                );
 
-    function sourceCheckIsDue() {
-        if (manualMode) return false;
+                if (!channel || !hasProblem(channel)) return;
 
-        const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
-        return !last || (Date.now() - last) >= SOURCE_SYNC_INTERVAL_MS;
+                const duration = incidentDuration(channel);
+                node.innerHTML =
+                    `<span class="dot"></span>${escapeHTML(duration)}`;
+            });
     }
 
-    let sourceAutoTimer = null;
+    async function init() {
+        updateClock();
+        setInterval(updateClock, 1000);
+        setInterval(refreshTimers, 30000);
 
-    function scheduleNextSourceCheck() {
-        if (sourceAutoTimer) clearTimeout(sourceAutoTimer);
-        sourceAutoTimer = null;
+        panelOpen =
+            localStorage.getItem('gpontv_manual_panel_open_v1') === 'true';
 
-        if (manualMode) return;
+        const form = document.getElementById('form-container');
+        const icon = document.getElementById('form-icon');
 
-        const last = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
-        const elapsed = last ? Date.now() - last : SOURCE_SYNC_INTERVAL_MS;
-        const delay = Math.max(1000, SOURCE_SYNC_INTERVAL_MS - elapsed);
+        form.style.display = panelOpen ? 'block' : 'none';
+        icon.textContent = panelOpen ? '▲' : '▼';
 
-        sourceAutoTimer = setTimeout(async () => {
-            await syncFromGponSource({ manual: false });
-            scheduleNextSourceCheck();
-        }, delay);
-    }
-
-    function setupAutomaticSourceChecks() {
-        scheduleNextSourceCheck();
-
-        document.addEventListener('visibilitychange', async () => {
-            if (!document.hidden && sourceCheckIsDue()) {
-                await syncFromGponSource({ manual: false });
-                scheduleNextSourceCheck();
-            }
-        });
-
-        window.addEventListener('focus', async () => {
-            if (sourceCheckIsDue()) {
-                await syncFromGponSource({ manual: false });
-                scheduleNextSourceCheck();
-            }
-        });
-    }
-
-    // ==================== INIT ====================
-    window.addEventListener(
-        'load',
-        async () => {
-            // Tema oscuro obligatorio.
-            isDarkMode = true;
-            document.body.classList.remove('light');
-            localStorage.setItem('theme', 'dark');
-
-            manualMode =
-                localStorage.getItem(MANUAL_MODE_KEY) === 'true';
-
-            updateManualModeButton();
-
-            // PANEL recuerda únicamente si estaba abierto.
-            // Su contenido depende exclusivamente de la tuerca ⚙️.
-            panelOpen =
-                localStorage.getItem('panelOpen') === 'true';
-
-            applyPanelState();
-
-            showLoading(true);
-
-            /*
-             * Carga primero la última información guardada en Supabase para que
-             * recargar la página sea inmediato. La consulta a DTVSOL corre luego
-             * en segundo plano solo si ya corresponde la revisión de 10 minutos.
-             */
+        try {
             await loadChannels();
-            await loadSourceHistory();
-
-            filterOnlyIncidents = channels.some(needsAttention);
-            updateFilterButton();
-            lastRenderedIds = '';
             renderChannels();
+            subscribeRealtime();
+        } catch (error) {
+            console.error(error);
 
-            const lastCheck = Number(localStorage.getItem(LAST_SOURCE_CHECK_KEY) || 0);
-            if (lastCheck) {
-                const lastText = new Date(lastCheck).toLocaleTimeString('es-PE', {
-                    hour: '2-digit', minute: '2-digit', second: '2-digit'
-                });
-                setSourceSyncStatus('online', `Última verificación DTVSOL ${lastText}`);
-            } else {
-                setSourceSyncStatus('idle', 'Datos guardados cargados · preparando primera verificación DTVSOL…');
-            }
-
-            showLoading(false);
-
-            await getNotificationRegistration();
-            processBrowserNotifications();
-            updateNotificationButton();
-
-            /* No bloquea la carga visual. */
-            if (sourceCheckIsDue()) {
-                syncFromGponSource({ initial: true });
-            }
-
-            setupRealtime();
-            updateDateTime();
-
-            setInterval(
-                updateDateTime,
-                1000
+            alert(
+                'No se pudo cargar GPON TV.\n\n' +
+                (error.message || String(error))
             );
-
-            setInterval(
-                tickTimers,
-                1000
-            );
-
-            setupAutomaticSourceChecks();
-
-            const numberInput =
-                document.getElementById(
-                    'channel-number'
-                );
-
-            const nameInput =
-                document.getElementById(
-                    'channel-name'
-                );
-
-            [
-                numberInput,
-                nameInput
-            ].forEach(input => {
-                if (!input) return;
-
-                input.addEventListener(
-                    'keydown',
-                    event => {
-                        if (
-                            event.key ===
-                            'Enter'
-                        ) {
-                            event.preventDefault();
-                            addChannel();
-                        }
-                    }
-                );
-            });
+        } finally {
+            document
+                .getElementById('loading-overlay')
+                .classList.add('hidden');
         }
-    );
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
