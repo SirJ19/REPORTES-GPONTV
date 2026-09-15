@@ -296,6 +296,46 @@
             color:#fb923c;
             text-transform:uppercase;
         }
+        .channel-number-history {
+            appearance:none;
+            border:1px solid transparent;
+            background:transparent;
+            border-radius:14px;
+            padding:4px 8px;
+            color:inherit;
+            cursor:pointer;
+            transition:background .15s ease, border-color .15s ease, transform .15s ease;
+        }
+        .channel-number-history:hover {
+            border-color:rgba(249,115,22,.55);
+            background:rgba(249,115,22,.08);
+            transform:translateY(-1px);
+        }
+        .channel-number-history:focus-visible {
+            outline:2px solid rgba(249,115,22,.75);
+            outline-offset:2px;
+        }
+        .channel-history-analysis {
+            border:1px solid #3f3f46;
+            border-radius:16px;
+            background:rgba(24,24,27,.42);
+            padding:12px 14px;
+            margin:12px 24px 0;
+        }
+        .channel-history-analysis-title {
+            font-size:.70rem;
+            font-weight:800;
+            letter-spacing:.35px;
+            text-transform:uppercase;
+            color:#fb923c;
+        }
+        .channel-history-analysis-text {
+            margin-top:5px;
+            font-size:.75rem;
+            line-height:1.5;
+            color:#a1a1aa;
+        }
+
 
 
 
@@ -362,26 +402,12 @@
                 </div>
                 <div class="flex items-center gap-2">
                     <div class="relative">
-                        <button onclick="togglePanel()" oncontextmenu="openPanelMenu(event)" id="toggle-form-btn"
+                        <button onclick="togglePanel()" id="toggle-form-btn"
                                 class="w-32 flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-3xl text-sm font-medium"
-                                title="Clic: mostrar/ocultar panel · Clic derecho: elegir contenido">
+                                title="Mostrar u ocultar panel">
                             <span id="form-icon">▼</span>
                             <span id="form-text">Panel</span>
                         </button>
-
-                        <div id="panel-context-menu"
-                             class="hidden absolute right-0 top-full mt-2 z-[9999] w-52 bg-zinc-950 border border-zinc-700 rounded-2xl shadow-2xl overflow-hidden">
-                            <button id="panel-sync-option" type="button" onclick="selectPanelMode('sync')"
-                                    class="w-full px-4 py-3 text-left text-sm hover:bg-zinc-900 flex items-center justify-between gap-3">
-                                <span>🔄 Verificación DTVSOL</span>
-                                <span id="panel-mode-sync-check" class="text-orange-400">✓</span>
-                            </button>
-                            <button type="button" onclick="selectPanelMode('add')"
-                                    class="w-full px-4 py-3 text-left text-sm hover:bg-zinc-900 flex items-center justify-between gap-3 border-t border-zinc-800">
-                                <span>➕ Agregar canal</span>
-                                <span id="panel-mode-add-check" class="text-orange-400 hidden">✓</span>
-                            </button>
-                        </div>
                     </div>
 
                     <button onclick="copyIncidentReport()" id="copy-report-btn"
@@ -495,6 +521,10 @@
 
                 <div id="channel-history-summary"
                      class="grid grid-cols-2 md:grid-cols-4 gap-3 px-6 pt-5">
+                </div>
+
+                <div id="channel-history-analysis"
+                     class="channel-history-analysis">
                 </div>
 
                 <div class="px-6 py-5">
@@ -617,7 +647,6 @@
     let channels = [];
     let filterOnlyIncidents = false;
     let panelOpen = false;
-    let panelMode = 'sync';
     let isDarkMode = true;
     let searchQuery = '';
     let operationInProgress = false;
@@ -628,6 +657,7 @@
     const SOURCE_SYNC_FUNCTION = 'swift-api';
     const SOURCE_SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutos
     const NOTIFIED_OUTAGES_KEY = 'gpontv_notified_source_outages_v2';
+    const MASS_INCIDENT_ALERT_KEY = 'gpontv_mass_incident_alert_v1';
     const ALERTS_ENABLED_KEY = 'gpontv_alerts_enabled_v1';
     const LAST_SOURCE_CHECK_KEY = 'gpontv_last_dtvsol_check_v1';
     const MANUAL_MODE_KEY = 'gpontv_manual_mode_v1';
@@ -1012,6 +1042,67 @@
         }).join('');
     }
 
+    function channelHistoryAnalysisHTML(channel) {
+        const availability =
+            channel.source_proxies_online !== null &&
+            channel.source_proxies_online !== undefined &&
+            channel.source_proxies_total !== null &&
+            channel.source_proxies_total !== undefined
+                ? `${channel.source_proxies_online}/${channel.source_proxies_total}`
+                : '—';
+
+        const failures = Number(channel.source_failure_count_8h || 0);
+        const changes = Number(channel.source_change_count_30m || 0);
+        const checks = Number(channel.source_stable_checks || 0);
+
+        let title = 'SIN INESTABILIDAD ACTIVA';
+        let description =
+            `Estado actual ${availability}. No hay una condición de inestabilidad activa en seguimiento.`;
+
+        if (channel.source_observing) {
+            title = `RECUPERACIÓN EN SEGUIMIENTO · ${checks} DE 3`;
+            description =
+                `El canal está operativo (${availability}), pero todavía no se confirma estable. ` +
+                `Solo cuenta una nueva validación aproximadamente cada 10 minutos. ` +
+                `Si vuelve a caer antes de completar 3 validaciones correctas, el conteo se reinicia.`;
+        } else if (channel.source_instability === 'flapping') {
+            title = channel.source_state === 'online'
+                ? 'FLAPPING RECIENTE · EN SEGUIMIENTO'
+                : 'FLAPPING DETECTADO';
+            description =
+                channel.source_state === 'online'
+                    ? `El canal está operativo ahora (${availability}), pero presentó oscilaciones repetidas entre caído y operativo. ` +
+                      `La advertencia permanecerá hasta completar 1 hora sin nuevas caídas.`
+                    : `El canal está alternando repetidamente entre caído y operativo. Estado actual: ${availability}.`;
+        } else if (channel.source_instability === 'possible') {
+            title = channel.source_state === 'online'
+                ? 'INESTABILIDAD RECIENTE · EN SEGUIMIENTO'
+                : 'POSIBLE INESTABILIDAD';
+            description =
+                channel.source_state === 'online'
+                    ? `El canal está operativo ahora (${availability}), pero levantó y volvió a caer recientemente. ` +
+                      `La advertencia permanecerá hasta completar 1 hora sin nuevas caídas.`
+                    : `Se detectó una recuperación transitoria seguida de una nueva caída. Estado actual: ${availability}.`;
+        } else if (channel.source_recurrent) {
+            title = 'PROBLEMAS RECURRENTES';
+            description =
+                `El canal registra ${failures} caídas/reincidencias durante las últimas 8 horas. ` +
+                `Estado actual: ${availability}.`;
+        }
+
+        const extras = [];
+        if (changes > 0) extras.push(`${changes} cambios de estado en 30 min`);
+        if (failures > 0) extras.push(`${failures} fallas/reincidencias en 8 h`);
+
+        return `
+            <div class="channel-history-analysis-title">${escapeHTML(title)}</div>
+            <div class="channel-history-analysis-text">
+                ${escapeHTML(description)}
+                ${extras.length ? `<div class="mt-2 text-zinc-500">${escapeHTML(extras.join(' · '))}</div>` : ''}
+            </div>
+        `;
+    }
+
     function channelHistoryEventDescription(event) {
         const descriptions = {
             down: 'Se detectó caída del canal.',
@@ -1039,11 +1130,12 @@
         const title = document.getElementById('channel-history-title');
         const subtitle = document.getElementById('channel-history-subtitle');
         const summary = document.getElementById('channel-history-summary');
+        const analysis = document.getElementById('channel-history-analysis');
         const list = document.getElementById('channel-history-list');
         const loading = document.getElementById('channel-history-loading');
         const empty = document.getElementById('channel-history-empty');
 
-        if (!modal || !title || !summary || !list || !loading || !empty) return;
+        if (!modal || !title || !summary || !analysis || !list || !loading || !empty) return;
 
         title.textContent = `${channel.number} · ${channel.name}`;
 
@@ -1095,6 +1187,8 @@
                     ? 'text-red-300'
                     : 'text-slate-300'
             );
+
+        analysis.innerHTML = channelHistoryAnalysisHTML(channel);
 
         modal.classList.remove('hidden');
         list.innerHTML = '';
@@ -1490,6 +1584,9 @@
             await getNotificationRegistration();
             updateNotificationButton();
             processBrowserNotifications();
+            await processMassIncidentNotification(
+                channels.filter(isIncident).length
+            );
         } else {
             localStorage.setItem(ALERTS_ENABLED_KEY, 'false');
             updateNotificationButton();
@@ -1683,6 +1780,57 @@
         for (const transition of selected.values()) {
             await showMonitorTransitionNotification(transition);
         }
+    }
+
+    async function processMassIncidentNotification(incidentCount) {
+        const count = Number(incidentCount || 0);
+        const wasActive =
+            localStorage.getItem(MASS_INCIDENT_ALERT_KEY) === 'true';
+
+        // Al bajar nuevamente a 6 o menos, se rearma la alerta.
+        if (count <= 6) {
+            if (wasActive) {
+                localStorage.setItem(MASS_INCIDENT_ALERT_KEY, 'false');
+            }
+            return;
+        }
+
+        if (wasActive) return;
+        if (!alertsEnabled() || Notification.permission !== 'granted') return;
+
+        const affected = channels
+            .filter(isIncident)
+            .slice(0, 6)
+            .map(channel => `${channel.number} ${channel.name}`)
+            .join(', ');
+
+        const options = {
+            body:
+                `${count} canales presentan incidencia activa.\n` +
+                `${affected}${count > 6 ? '…' : ''}`,
+            tag: 'gpontv-mass-incidents',
+            renotify: true,
+            requireInteraction: true,
+            icon: './favicon.png',
+            badge: './favicon.png',
+            data: { type: 'mass-incidents', count }
+        };
+
+        const registration = await getNotificationRegistration();
+
+        if (registration) {
+            await registration.showNotification(
+                '🚨 NOC · MÚLTIPLES INCIDENCIAS',
+                options
+            );
+        } else {
+            new Notification(
+                '🚨 NOC · MÚLTIPLES INCIDENCIAS',
+                options
+            );
+        }
+
+        localStorage.setItem(MASS_INCIDENT_ALERT_KEY, 'true');
     }
 
     async function processBrowserNotifications() {
@@ -2266,26 +2414,10 @@ ${error.message}`);
 
     // ==================== COPIAR REPORTE ====================
     function copyIncidentReport() {
-        /*
-         * El reporte mantiene el formato NOC de IMAGEN/AUDIO.
-         * Con DTVSOL activo también incorpora canales con inestabilidad
-         * relevante para que no se pierdan flapping/reincidencias.
-         * En MODO MANUAL se omite toda la información DTVSOL.
-         */
-        const hasReportInstability = channel => {
-            if (manualMode) return false;
-
-            return (
-                channel.source_instability === 'flapping' ||
-                channel.source_instability === 'possible' ||
-                channel.source_recurrent === true
-            );
-        };
-
-        const problemChannels = channels.filter(channel =>
-            !channel.image ||
-            !channel.sound ||
-            hasReportInstability(channel)
+        // Reporte NOC clásico: únicamente validación manual de IMAGEN/AUDIO.
+        // DTVSOL, flapping, recurrencia y observación NO se copian.
+        const problemChannels = channels.filter(
+            channel => !channel.image || !channel.sound
         );
 
         if (problemChannels.length === 0) {
@@ -2315,47 +2447,13 @@ ${error.message}`);
             if (!channel.image) issues.push('Sin Imagen');
             if (!channel.sound) issues.push('Sin Audio');
 
-            if (!manualMode) {
-                if (channel.source_instability === 'flapping') {
-                    issues.push(
-                        channel.source_state === 'online' && !channel.source_observing
-                            ? 'Inestabilidad reciente: flapping en seguimiento'
-                            : 'Inestable: flapping detectado'
-                    );
-                } else if (channel.source_instability === 'possible') {
-                    issues.push(
-                        channel.source_state === 'online' && !channel.source_observing
-                            ? 'Inestabilidad reciente en seguimiento'
-                            : 'Posible inestabilidad: recuperación transitoria'
-                    );
-                } else if (channel.source_recurrent === true) {
-                    const failures = Math.max(
-                        0,
-                        Number(channel.source_failure_count_8h || 0)
-                    );
-
-                    issues.push(
-                        failures > 0
-                            ? `Recurrente: ${failures} caídas/reincidencias en 8h`
-                            : 'Problemas recurrentes'
-                    );
-                }
-            }
-
             const globalStartRaw = channel.incident_since
                 ? new Date(channel.incident_since).getTime()
-                : null;
-            const sourceTransitionRaw = channel.source_last_transition_at
-                ? new Date(channel.source_last_transition_at).getTime()
                 : null;
 
             const start = Number.isFinite(globalStartRaw)
                 ? globalStartRaw
-                : (
-                    Number.isFinite(sourceTransitionRaw)
-                        ? sourceTransitionRaw
-                        : null
-                );
+                : null;
 
             const duration = start
                 ? ` - ${formatDuration((Date.now() - start) / 1000)}`
@@ -2376,12 +2474,20 @@ ${error.message}`);
 
             if (icon) icon.textContent = '✅';
             if (text) text.textContent = 'COPIADO';
-            if (button) button.classList.add('border-orange-500', 'text-orange-400', 'bg-orange-500/10');
+            if (button) button.classList.add(
+                'border-orange-500',
+                'text-orange-400',
+                'bg-orange-500/10'
+            );
 
             setTimeout(() => {
                 if (icon) icon.textContent = '📋';
                 if (text) text.textContent = 'COPIAR';
-                if (button) button.classList.remove('border-orange-500', 'text-orange-400', 'bg-orange-500/10');
+                if (button) button.classList.remove(
+                    'border-orange-500',
+                    'text-orange-400',
+                    'bg-orange-500/10'
+                );
             }, 1500);
         };
 
@@ -2446,6 +2552,8 @@ ${error.message}`);
         }
 
         const incidentCount = channels.filter(isIncident).length;
+
+        void processMassIncidentNotification(incidentCount);
 
         setText('total-channels', channels.length);
         setText('incidents-count', incidentCount);
@@ -2618,9 +2726,16 @@ ${error.message}`);
             <div class="flex items-center justify-between gap-5">
                 <div class="flex items-center gap-6 min-w-0">
                     <div class="w-14 text-center shrink-0">
-                        <div class="text-3xl font-mono font-bold text-orange-400">
-                            ${escapeHTML(channel.number)}
-                        </div>
+                        ${manualMode
+                            ? `<div class="text-3xl font-mono font-bold text-orange-400 px-2 py-1">
+                                ${escapeHTML(channel.number)}
+                               </div>`
+                            : `<button type="button"
+                                       onclick='openChannelHistory(${idArgument})'
+                                       class="channel-number-history text-3xl font-mono font-bold text-orange-400"
+                                       title="Ver historial del canal">
+                                ${escapeHTML(channel.number)}
+                               </button>`}
                     </div>
                     <div class="min-w-0">
                         <div class="text-xl font-semibold truncate">
@@ -2632,7 +2747,6 @@ ${error.message}`);
                                 <span class="${sourceStateClass(channel)} proxy-pill">
                                     ${escapeHTML(sourceStateText(channel))}
                                 </span>
-                                ${sourceHealthBadge(channel)}
                                 ${stage}
                             </div>`}
                     </div>
@@ -3086,23 +3200,23 @@ ${error.message}`);
         const syncBar = document.getElementById('source-sync-bar');
         const formContainer = document.getElementById('form-container');
         const icon = document.getElementById('form-icon');
-        const syncCheck = document.getElementById('panel-mode-sync-check');
-        const addCheck = document.getElementById('panel-mode-add-check');
-        const syncOption = document.getElementById('panel-sync-option');
+        const button = document.getElementById('toggle-form-btn');
 
-        // Solo se muestra el contenido elegido. Nunca ambos a la vez.
+        /*
+         * La tuerca decide el contenido del botón PANEL:
+         * DTVSOL activo -> Verificación DTVSOL
+         * Modo manual  -> Agregar canal
+         */
         if (syncBar) {
             syncBar.style.display =
-                !manualMode &&
-                panelOpen &&
-                panelMode === 'sync'
+                panelOpen && !manualMode
                     ? 'flex'
                     : 'none';
         }
 
         if (formContainer) {
             formContainer.style.display =
-                panelOpen && panelMode === 'add'
+                panelOpen && manualMode
                     ? 'block'
                     : 'none';
         }
@@ -3111,63 +3225,23 @@ ${error.message}`);
             icon.textContent = panelOpen ? '▲' : '▼';
         }
 
-        if (syncCheck) {
-            syncCheck.classList.toggle('hidden', panelMode !== 'sync');
-        }
-
-        if (addCheck) {
-            addCheck.classList.toggle('hidden', panelMode !== 'add');
-        }
-
-        if (syncOption) {
-            syncOption.classList.toggle('hidden', manualMode);
+        if (button) {
+            button.title = manualMode
+                ? 'Mostrar u ocultar Agregar canal'
+                : 'Mostrar u ocultar Verificación DTVSOL';
         }
 
         localStorage.setItem('panelOpen', String(panelOpen));
-        localStorage.setItem('panelMode', panelMode);
     }
 
     function togglePanel() {
-        if (manualMode && panelMode === 'sync') {
-            panelMode = 'add';
-        }
-
         panelOpen = !panelOpen;
-        closePanelMenu();
         applyPanelState();
     }
 
-    // Compatibilidad por si algún código antiguo todavía llama toggleForm().
+    // Compatibilidad con llamadas antiguas.
     function toggleForm() {
         togglePanel();
-    }
-
-    function openPanelMenu(event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        const menu = document.getElementById('panel-context-menu');
-        if (!menu) return;
-
-        menu.classList.toggle('hidden');
-    }
-
-    function closePanelMenu() {
-        const menu = document.getElementById('panel-context-menu');
-        if (menu) menu.classList.add('hidden');
-    }
-
-    function selectPanelMode(mode) {
-        if (mode !== 'sync' && mode !== 'add') return;
-        if (manualMode && mode === 'sync') return;
-
-        panelMode = mode;
-
-        // Al elegir con clic derecho, muestra inmediatamente esa sección.
-        panelOpen = true;
-
-        closePanelMenu();
-        applyPanelState();
     }
 
     function updateManualModeButton() {
@@ -3207,10 +3281,6 @@ ${error.message}`);
             if (sourceAutoTimer) {
                 clearTimeout(sourceAutoTimer);
                 sourceAutoTimer = null;
-            }
-
-            if (panelMode === 'sync') {
-                panelOpen = false;
             }
 
             closeSourceInventory();
@@ -3983,22 +4053,10 @@ ${error.message}`);
 
             updateManualModeButton();
 
-            const savedPanelMode =
-                localStorage.getItem('panelMode');
-
-            panelMode =
-                savedPanelMode === 'add'
-                    ? 'add'
-                    : 'sync';
-
-            // Por defecto inicia oculto. Si el usuario ya eligió dejarlo abierto,
-            // se respeta su última preferencia.
+            // PANEL recuerda únicamente si estaba abierto.
+            // Su contenido depende exclusivamente de la tuerca ⚙️.
             panelOpen =
                 localStorage.getItem('panelOpen') === 'true';
-
-            if (manualMode && panelMode === 'sync') {
-                panelOpen = false;
-            }
 
             applyPanelState();
 
