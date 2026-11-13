@@ -361,6 +361,41 @@
         </form>
     </div>
 
+    <!-- Importación opcional, protegida con vista previa. El clic derecho sigue disponible. -->
+    <div id="csv-import-modal" role="dialog" aria-modal="true" aria-labelledby="csv-import-title"
+         style="display:none;" class="fixed inset-0 z-[10001] items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
+        <div class="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-zinc-950 rounded-3xl border border-zinc-700 p-6 shadow-2xl">
+            <div class="flex justify-between items-start gap-4 mb-4">
+                <div>
+                    <h2 class="text-xl text-white font-semibold" id="csv-import-title">Vista previa · actualización CSV</h2>
+                    <p id="csv-import-file" class="text-xs text-slate-400 mt-1"></p>
+                </div>
+                <button id="csv-import-close" type="button" onclick="closeCSVImport()"
+                        class="text-xl text-slate-400 hover:text-white" aria-label="Cerrar">✕</button>
+            </div>
+            <p class="text-sm text-slate-300 mb-3">Se actualizarán solo <b>número y nombre</b> de los canales existentes.
+                Se conservan imagen, audio, incidencias y sus fechas. Los canales ausentes del CSV no se eliminan.</p>
+            <div id="csv-import-summary" class="rounded-xl bg-black border border-zinc-800 p-3 text-sm text-slate-200 mb-3"></div>
+            <div id="csv-import-warning" class="hidden rounded-xl border border-amber-600/60 text-amber-200 p-3 text-sm mb-3"></div>
+            <div id="csv-import-error" role="alert" class="hidden rounded-xl border border-red-700 text-red-300 p-3 text-sm mb-3"></div>
+            <div class="max-h-[43vh] overflow-auto border border-zinc-800 rounded-xl mb-4">
+                <table class="w-full text-left text-xs">
+                    <thead class="sticky top-0 bg-zinc-900 text-slate-300">
+                        <tr><th class="p-2">Acción</th><th class="p-2">Antes</th><th class="p-2">Después</th></tr>
+                    </thead>
+                    <tbody id="csv-import-rows" class="divide-y divide-zinc-800"></tbody>
+                </table>
+            </div>
+            <p id="csv-import-progress" class="text-sm text-slate-400 mb-3" aria-live="polite"></p>
+            <div class="flex flex-wrap gap-3 justify-end">
+                <button type="button" onclick="closeCSVImport()"
+                        class="px-5 py-3 bg-zinc-800 rounded-2xl text-sm font-medium">Cancelar</button>
+                <button id="csv-import-apply" type="button" onclick="applyCSVImport()"
+                        class="px-5 py-3 bg-orange-500 hover:bg-orange-400 rounded-2xl text-black text-sm font-bold disabled:opacity-40">Confirmar y actualizar Supabase</button>
+            </div>
+        </div>
+    </div>
+
     <div class="fixed bottom-8 right-8 bg-black border border-zinc-800 rounded-3xl px-6 py-3 flex items-center gap-4 shadow-2xl">
         <div onclick="toggleFilter()" class="cursor-pointer flex items-center gap-3">
             <div id="footer-dot" class="w-3.5 h-3.5 bg-orange-500 rounded-full"></div>
@@ -383,6 +418,11 @@
                 class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
             Exportar CSV
         </button>
+        <label for="sync-file" class="text-xs px-4 py-1.5 hover:bg-orange-500/10 text-orange-300 border border-orange-700/60 rounded-2xl cursor-pointer">
+            ⬆ Actualizar CSV
+            <input type="file" id="sync-file" accept=".csv,text/csv" class="hidden"
+                   onchange="prepareCSVImport(this)">
+        </label>
 
 
     </div>
@@ -817,6 +857,7 @@
 
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && editingChannelId !== null) closeEditChannel();
+        if (event.key === 'Escape' && !csvApplying && csvPendingRows) closeCSVImport();
     });
     document.addEventListener('click', event => {
         const modal = document.getElementById('edit-channel-modal');
@@ -1187,6 +1228,316 @@
         return text;
     }
 
+    // Sincronización CSV: no usar upsert(number); el número puede cambiar o intercambiarse.
+    // CSV: current_number,current_name,number,name. Filas nuevas: current_* vacíos.
+    let csvPendingRows = null;
+    let csvPendingSignature = null;
+    let csvPreviewPlan = null;
+    let csvApplying = false;
+
+    function csvNormalizeName(value) {
+        return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toLocaleLowerCase('es').trim().replace(/\s+/g, ' ');
+    }
+
+    function csvNumber(value, label, required = true) {
+        const text = String(value ?? '').trim();
+        if (!text && !required) return '';
+        const number = Number(text);
+        if (!/^\d+$/.test(text) || !Number.isSafeInteger(number) || number < 1 || number > 2147483647) {
+            throw new Error(`${label}: número inválido (${text || 'vacío'}).`);
+        }
+        return String(number);
+    }
+
+    function csvSetError(message) {
+        const node = document.getElementById('csv-import-error');
+        node.textContent = message || '';
+        node.classList.toggle('hidden', !message);
+    }
+
+    function csvSignature(snapshot) {
+        return JSON.stringify([...snapshot].map(c => [String(c.id), String(c.number), String(c.name)])
+            .sort((a, b) => a[0].localeCompare(b[0])));
+    }
+
+    function parseImportRows(text) {
+        const parsed = parseCSV(text.replace(/^\uFEFF/, ''));
+        if (parsed.length < 2) throw new Error('El CSV no tiene canales.');
+        const headers = parsed[0].map(value => value.trim().replace(/^\uFEFF/, '').toLowerCase());
+        const indices = ['current_number', 'current_name', 'number', 'name'].map(key => headers.indexOf(key));
+        if (indices.some(index => index < 0)) {
+            throw new Error('El CSV debe incluir las columnas current_number,current_name,number,name.');
+        }
+        const targetNumbers = new Set();
+        const sources = new Set();
+        const rows = [];
+        parsed.slice(1).forEach((cells, i) => {
+            if (cells.every(value => !String(value).trim())) return;
+            const rowNum = i + 2;
+            const originalNumber = csvNumber(cells[indices[0]], `Fila ${rowNum} (current_number)`, false);
+            const originalName = String(cells[indices[1]] ?? '').trim();
+            const number = csvNumber(cells[indices[2]], `Fila ${rowNum} (number)`);
+            const name = String(cells[indices[3]] ?? '').trim();
+            if (!name || name.length > 150) throw new Error(`Fila ${rowNum}: nombre vacío o muy largo.`);
+            if (Boolean(originalNumber) !== Boolean(originalName)) {
+                throw new Error(`Fila ${rowNum}: current_number y current_name deben estar ambos completos o ambos vacíos (canal nuevo).`);
+            }
+            if (targetNumbers.has(number)) throw new Error(`Número nuevo ${number} duplicado en el CSV.`);
+            targetNumbers.add(number);
+            if (originalNumber) {
+                if (sources.has(originalNumber)) throw new Error(`Número anterior ${originalNumber} repetido en el CSV.`);
+                sources.add(originalNumber);
+            }
+            rows.push({ originalNumber, originalName, number, name, rowNum });
+        });
+        if (!rows.length) throw new Error('No se encontraron filas de canales válidas.');
+        return rows;
+    }
+
+    function csvBuildPlan(csvRows, snapshot) {
+        const nameIndex = new Map();
+        const numberIndex = new Map();
+        snapshot.forEach(c => {
+            const nameKey = csvNormalizeName(c.name);
+            if (!nameIndex.has(nameKey)) nameIndex.set(nameKey, []);
+            nameIndex.get(nameKey).push(c);
+            numberIndex.set(String(Number(c.number)), c);
+        });
+        const updates = [], additions = [], unchanged = [], usedIds = new Set();
+        for (const row of csvRows) {
+            const targetNameKey = csvNormalizeName(row.name);
+            if (!row.originalNumber) {
+                const existing = (nameIndex.get(targetNameKey) || []).filter(c => String(Number(c.number)) === row.number);
+                if (existing.length === 1) {
+                    unchanged.push(existing[0]);
+                    usedIds.add(String(existing[0].id));
+                } else {
+                    additions.push(row);
+                }
+                continue;
+            }
+            const oldCandidates = nameIndex.get(csvNormalizeName(row.originalName)) || [];
+            let match = oldCandidates.find(c => String(Number(c.number)) === row.originalNumber);
+            if (!match && oldCandidates.length === 1) match = oldCandidates[0];
+            // If applied previously, match new name at the desired number for safe re-import.
+            if (!match) {
+                const already = (nameIndex.get(targetNameKey) || [])
+                    .filter(c => String(Number(c.number)) === row.number);
+                if (already.length === 1) match = already[0];
+            }
+            if (!match) {
+                throw new Error(`Fila ${row.rowNum}: no se encontró «${row.originalName}» (${row.originalNumber}) en Supabase. No se reasignan canales por número solamente.`);
+            }
+            const currentNumber = String(Number(match.number));
+            if (currentNumber !== row.originalNumber && currentNumber !== row.number) {
+                throw new Error(`Fila ${row.rowNum}: «${match.name}» ahora está en ${currentNumber}, pero el CSV parte de ${row.originalNumber}. Exporta un CSV nuevo antes de continuar.`);
+            }
+            if (usedIds.has(String(match.id))) throw new Error(`Fila ${row.rowNum}: el canal «${match.name}» aparece varias veces.`);
+            usedIds.add(String(match.id));
+            if (currentNumber === row.number && match.name === row.name) {
+                unchanged.push(match);
+            } else {
+                updates.push({ id: match.id, oldNumber: currentNumber,
+                    oldName: match.name, number: row.number, name: row.name });
+            }
+        }
+        // The final number must be free or owned by a channel scheduled to move.
+        const movingIds = new Set(updates.filter(u => u.oldNumber !== u.number).map(u => String(u.id)));
+        for (const row of [...updates, ...additions]) {
+            const other = numberIndex.get(row.number);
+            if (other && String(other.id) !== String(row.id ?? '') && !movingIds.has(String(other.id))) {
+                throw new Error(`El destino ${row.number} está ocupado por «${other.name}», que no se va a mover. No se modificó nada.`);
+            }
+        }
+        const warnings = [];
+        if ([...updates, ...additions].some(r => Number(r.number) > 999)) {
+            warnings.push('Hay un número mayor a 999 (por ejemplo 7339 para Comedy Central). Confirma que corresponde a Order en IPTV.');
+        }
+        return { updates, additions, unchanged, warnings, total:csvRows.length };
+    }
+
+    function csvRenderPreview(plan, filename) {
+        document.getElementById('csv-import-file').textContent = filename;
+        const modifiedNumbers = plan.updates.filter(u => u.oldNumber !== u.number).length;
+        const names = plan.updates.filter(u => u.oldName !== u.name).length;
+        document.getElementById('csv-import-summary').textContent =
+            `${plan.total} filas · ${modifiedNumbers} números · ${names} nombres · ` +
+            `${plan.additions.length} canales nuevos · ${plan.unchanged.length} sin cambios`;
+        const warnings = document.getElementById('csv-import-warning');
+        warnings.textContent = plan.warnings.join(' ');
+        warnings.classList.toggle('hidden', !plan.warnings.length);
+        const tbody = document.getElementById('csv-import-rows');
+        tbody.innerHTML = '';
+        const changed = [
+            ...plan.updates.map(u => ({ type:'Actualizar', before:`${u.oldNumber} · ${u.oldName}`, after:`${u.number} · ${u.name}` })),
+            ...plan.additions.map(u => ({ type:'Agregar', before:'Nuevo canal', after:`${u.number} · ${u.name}` }))
+        ];
+        changed.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td class="p-2 text-orange-300">${escapeHTML(item.type)}</td>` +
+                `<td class="p-2 text-slate-300">${escapeHTML(item.before)}</td>` +
+                `<td class="p-2 text-white font-semibold">${escapeHTML(item.after)}</td>`;
+            tbody.appendChild(tr);
+        });
+        if (!changed.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td colspan="3" class="p-3 text-center text-slate-400">El CSV ya está aplicado. No hay cambios.</td>';
+            tbody.appendChild(tr);
+        }
+        const apply = document.getElementById('csv-import-apply');
+        apply.textContent = 'Confirmar y actualizar Supabase';
+        apply.disabled = !changed.length;
+        document.getElementById('csv-import-progress').textContent = '';
+    }
+
+    async function prepareCSVImport(input) {
+        const file = input.files?.[0];
+        input.value = '';
+        if (!file || csvApplying || operationInProgress) return;
+        const modal = document.getElementById('csv-import-modal');
+        modal.style.display = 'flex';
+        document.getElementById('csv-import-apply').disabled = true;
+        csvSetError('');
+        document.getElementById('csv-import-summary').textContent = 'Comprobando canales actuales en Supabase…';
+        document.getElementById('csv-import-rows').innerHTML = '';
+        document.getElementById('csv-import-warning').classList.add('hidden');
+        try {
+            const csvRows = parseImportRows(await file.text());
+            const { data, error } = await sb.from('GPONTV').select(CHANNEL_SELECT);
+            if (error) throw error;
+            const snapshot = (data || []).map(mapRowToChannel);
+            const plan = csvBuildPlan(csvRows, snapshot);
+            csvPendingRows = csvRows;
+            csvPendingSignature = csvSignature(snapshot);
+            csvPreviewPlan = plan;
+            csvRenderPreview(plan, file.name);
+        } catch (error) {
+            csvPendingRows = null;
+            csvPreviewPlan = null;
+            csvSetError(`No se puede aplicar el CSV: ${error.message || error}`);
+            document.getElementById('csv-import-summary').textContent = 'Revisa el archivo o los datos actuales del monitor.';
+        }
+    }
+
+    function closeCSVImport() {
+        if (csvApplying) return;
+        csvPendingRows = null;
+        csvPreviewPlan = null;
+        document.getElementById('csv-import-modal').style.display = 'none';
+        csvSetError('');
+    }
+
+    async function csvUpdateById(id, fields) {
+        const {data,error} = await sb.from('GPONTV').update(fields)
+            .eq('id',id).select('id,number,name').single();
+        if (error) throw error;
+        if (!data) throw new Error('Supabase no confirmó una actualización.');
+        return data;
+    }
+
+    async function applyCSVImport() {
+        if (!csvPendingRows || !csvPreviewPlan || csvApplying || operationInProgress) return;
+        if (!confirm('¿Actualizar en Supabase los números y nombres mostrados? Se descargará un respaldo CSV antes de empezar.')) return;
+        if (csvPreviewPlan.warnings.length && !confirm(csvPreviewPlan.warnings.join('\n') + '\n\n¿Continuar igualmente?')) return;
+        const button = document.getElementById('csv-import-apply');
+        const progress = document.getElementById('csv-import-progress');
+        csvApplying = true;
+        operationInProgress = true;
+        button.disabled = true;
+        document.getElementById('csv-import-close').disabled = true;
+        csvSetError('');
+        const undo = [];
+        let done = 0;
+        try {
+            const {data,error} = await sb.from('GPONTV').select(CHANNEL_SELECT);
+            if (error) throw error;
+            const snapshot = (data || []).map(mapRowToChannel);
+            if (csvSignature(snapshot) !== csvPendingSignature) {
+                throw new Error('La lista cambió desde la vista previa. Cierra y vuelve a importar el CSV.');
+            }
+            const plan = csvBuildPlan(csvPendingRows, snapshot);
+            // A downloadable CSV backup of all rows in the exact pre-import state.
+            const backupRows = [['number','name','image','sound'], ...snapshot.map(c => [c.number,c.name,c.image,c.sound])];
+            const backupText = '\uFEFF' + backupRows.map(row => row.map(csvEscape).join(',')).join('\r\n');
+            const backupURL = URL.createObjectURL(new Blob([backupText],{type:'text/csv;charset=utf-8'}));
+            const a = document.createElement('a');
+            a.href = backupURL;
+            a.download = `gpon_tv_respaldo_antes_de_importar_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(backupURL), 15000);
+            const reserved = new Set([...snapshot.map(c => String(Number(c.number))), ...csvPendingRows.map(c => c.number)]);
+            let nextTemp = 900;
+            const tempNumber = () => {
+                while (reserved.has(String(nextTemp))) nextTemp++;
+                if (nextTemp > 9999) throw new Error('No hay un número temporal disponible.');
+                const value = String(nextTemp++);
+                reserved.add(value);
+                return value;
+            };
+            const moves = plan.updates.filter(u => u.oldNumber !== u.number);
+            const tempById = new Map();
+            const totalOperations = moves.length + plan.updates.length + plan.additions.length;
+            // 1: Free all changing numbers, to avoid unique constraint failures on swaps.
+            for (const move of moves) {
+                const temporary = tempNumber();
+                await csvUpdateById(move.id, {number: temporary});
+                tempById.set(String(move.id), temporary);
+                undo.push({type:'update', id:move.id, number:move.oldNumber, name:move.oldName});
+                progress.textContent = `Preparando numeración: ${++done}/${totalOperations}`;
+            }
+            // 2: Commit final names and numbers. Keep original incident and sound/image fields.
+            for (const change of plan.updates) {
+                // Exact source value for rollback, without reading a moving row again.
+                const currentTemp = tempById.get(String(change.id)) || change.oldNumber;
+                await csvUpdateById(change.id, {number:change.number, name:change.name});
+                undo.push({type:'update',id:change.id,number:currentTemp,name:change.oldName});
+                progress.textContent = `Actualizando canales: ${++done}/${totalOperations}`;
+            }
+            for (const addition of plan.additions) {
+                const {data:created,error:createError} = await sb.from('GPONTV').insert({
+                    number:addition.number, name:addition.name, image:true, sound:true,
+                    incident_open:false, incident_since:null, incident_origin:null
+                }).select('id').single();
+                if (createError) throw createError;
+                if (!created?.id) throw new Error(`No se confirmó la creación de «${addition.name}».`);
+                undo.push({type:'delete',id:created.id});
+                progress.textContent = `Agregando canales: ${++done}/${totalOperations}`;
+            }
+            progress.textContent = 'Actualización terminada. Comprobando los cambios…';
+            await safeReload();
+            document.getElementById('csv-import-summary').textContent =
+                `Listo: ${plan.updates.length} canales editados y ${plan.additions.length} agregados.`;
+            button.textContent = 'Actualizado';
+            csvPendingRows = null;
+            csvPreviewPlan = null;
+        } catch (error) {
+            console.error('Fallo de importación:',error);
+            progress.textContent = 'Error. Intentando revertir los cambios aplicados…';
+            const undoErrors = [];
+            for (const op of undo.reverse()) {
+                try {
+                    if (op.type === 'delete') {
+                        const {error:e} = await sb.from('GPONTV').delete().eq('id',op.id);
+                        if (e) throw e;
+                    } else {
+                        await csvUpdateById(op.id,{number:op.number,name:op.name});
+                    }
+                } catch (restoreError) { undoErrors.push(String(restoreError.message || restoreError)); }
+            }
+            await safeReload();
+            csvSetError('No se completó la importación: ' + (error.message || error) +
+                (undoErrors.length ? ` No se pudieron revertir ${undoErrors.length} operaciones. Verifica los canales manualmente.`
+                                   : ' Se intentó revertir cualquier cambio parcial. Revisa el monitor antes de reintentar.'));
+            progress.textContent = 'Importación interrumpida.';
+        } finally {
+            csvApplying = false;
+            operationInProgress = false;
+            document.getElementById('csv-import-close').disabled = false;
+            if (csvPendingRows) button.disabled = false;
+        }
+    }
+
     function parseCSV(text) {
         const rows = [];
         let row = [];
@@ -1256,6 +1607,7 @@
                     table: 'GPONTV'
                 },
                 async payload => {
+                    if (csvApplying) return; // reload once after batch import
                     if (payload.eventType === 'DELETE') {
                         channels = channels.filter(
                             channel =>
