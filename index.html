@@ -414,15 +414,20 @@
 
         <div class="w-px h-4 bg-zinc-700"></div>
 
-        <button onclick="exportData()"
-                class="text-xs px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl">
-            Exportar CSV
-        </button>
-        <label for="sync-file" class="text-xs px-4 py-1.5 hover:bg-orange-500/10 text-orange-300 border border-orange-700/60 rounded-2xl cursor-pointer">
-            ⬆ Actualizar CSV
+        <!-- Un único botón CSV; el botón de cambio a su derecha alterna la acción. -->
+        <div class="flex items-center gap-1.5">
+            <button id="csv-action-btn" type="button" onclick="runCSVAction()"
+                    class="text-xs text-white px-4 py-1.5 hover:bg-zinc-950 border border-zinc-800 rounded-2xl min-w-[112px] whitespace-nowrap"
+                    title="Exportar listado de canales">
+                <span id="csv-action-label">Exportar CSV</span>
+            </button>
+            <button id="csv-action-switch" type="button" onclick="toggleCSVAction()"
+                    class="text-sm text-white w-8 h-8 flex items-center justify-center hover:bg-zinc-950 border border-zinc-800 rounded-2xl"
+                    aria-label="Cambiar entre exportar y actualizar CSV"
+                    title="Cambiar entre exportar y actualizar CSV" aria-pressed="false">⇄</button>
             <input type="file" id="sync-file" accept=".csv,text/csv" class="hidden"
                    onchange="prepareCSVImport(this)">
-        </label>
+        </div>
 
 
     </div>
@@ -1186,6 +1191,27 @@
         }
 
         area.remove();
+    }
+
+    // Alternador compacto de la acción CSV, sin crear un botón extra permanente.
+    let csvActionMode = 'export';
+
+    function toggleCSVAction() {
+        csvActionMode = csvActionMode === 'export' ? 'import' : 'export';
+        const isImport = csvActionMode === 'import';
+        document.getElementById('csv-action-label').textContent =
+            isImport ? 'Actualizar CSV' : 'Exportar CSV';
+        document.getElementById('csv-action-btn').title =
+            isImport ? 'Subir archivo CSV para actualizar canales' : 'Exportar listado de canales';
+        document.getElementById('csv-action-switch').setAttribute('aria-pressed', String(isImport));
+    }
+
+    function runCSVAction() {
+        if (csvActionMode === 'import') {
+            document.getElementById('sync-file').click();
+        } else {
+            exportData();
+        }
     }
 
     function exportData() {
